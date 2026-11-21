@@ -25,7 +25,7 @@ variable "vpc_id" {
 }
 
 variable "subnet_ids" {
-  description = "Existing private subnets with outbound HTTPS and no inbound access."
+  description = "Existing public subnets with an internet gateway route. The runner security group allows no inbound traffic."
   type        = list(string)
 }
 

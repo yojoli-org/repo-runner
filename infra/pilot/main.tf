@@ -39,6 +39,8 @@ module "pilot" {
   enable_runner_bidirectional_label_match = true
   enable_dynamic_labels                   = false
   enable_ssm_on_runners                   = false
+  associate_public_ipv4_address           = true
+  enable_managed_runner_security_group    = true
   pool_config                             = []
   idle_config                             = []
   logging_retention_in_days               = 7
