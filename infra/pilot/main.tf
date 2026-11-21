@@ -35,7 +35,7 @@ module "pilot" {
 
   runner_os                               = "linux"
   runner_architecture                     = "arm64"
-  instance_types                          = ["m7g.large"]
+  instance_types                          = ["t4g.small"]
   instance_target_capacity_type           = "on-demand"
   runners_maximum_count                   = 1
   enable_ephemeral_runners                = true
