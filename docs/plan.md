@@ -22,3 +22,11 @@ The standard Linux pool supports shell jobs and Docker workflows on one disposab
 ## Event boundaries
 
 Customers define when their CI workflows should queue jobs. Repo Runner provisions capacity for matching queued jobs. Assess whether the customer's triggers queue unnecessary jobs as a separate check before cutover.
+
+## Portal onboarding
+
+Start with GitHub source control, GitHub Actions, and AWS runner hosting. The customer selects repositories and a starter pool, grants scoped access on the provider's own authorization pages, and chooses which setup steps to delegate. Where an API and the approved permissions allow it, Repo Runner makes the changes and verifies the result. For customer-owned steps, show the exact action and how to resume. Report missing privileges at the step that needs them.
+
+Preview the target account, repositories, infrastructure, and capacity limits before applying. A backend worker will apply the exact approved plan and report progress, then run a smoke test and verify cleanup. Keep workflow edits a separately approved option. The CLI installer remains available for operators and self-hosters. Share deployment logic between the two once the terminal prompts have been separated from execution.
+
+Keep source control, CI/CD, and runner hosting as separate integration roles. GitHub fills the first two today. Repository selection and optional workflow edits belong to source control. Job routing, runner registration, and smoke-test status belong to CI/CD. Provisioning, worker sizing, and teardown belong to the host integration. Keep GitHub and AWS details behind those boundaries. Add other providers when a supported customer use case warrants it and show only combinations we have verified. Portal outages should leave deployed runner pools able to process jobs.
