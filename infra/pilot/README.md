@@ -18,4 +18,13 @@ Use existing public subnets with an internet gateway route. Each running worker 
 
 Before any apply, get approval for the AWS account, region, budget, network, and dedicated GitHub App installation. Use the [upstream setup guide](https://github-aws-runners.github.io/terraform-aws-github-runner/getting-started/) for App permissions and webhook setup. Pass the existing SSM parameter ARNs and names for the App ID, base64-encoded private key and webhook secret. Keep parameter values outside Terraform. Use an approved state backend before a live plan or apply.
 
+For a live plan, initialize against a pre-created, private, encrypted and versioned S3 bucket in the sandbox account. Terraform uses S3 lockfiles, which require Terraform 1.10 or later. Supply the backend configuration separately from the repo:
+
+```sh
+AWS_PROFILE=repo-runner-sandbox terraform init -reconfigure -lockfile=readonly \
+  -backend-config="bucket=$PILOT_STATE_BUCKET" \
+  -backend-config=key=repo-runner/pilot/terraform.tfstate \
+  -backend-config="region=$PILOT_AWS_REGION"
+```
+
 Copy the manual smoke workflow to the approved private sandbox repository. Install the App only for that repository and point it at the `webhook_endpoint` stack output. Review the plan, then, once authorized, verify an unrelated label or repository doesn't launch a worker and dispatch the matching smoke job. Record startup time, job outcome, instance and disk deletion, and residual costs. The smoke workflow in the public product repository is a template for the pilot. Review the pilot result before enabling access to real customer workflows.
