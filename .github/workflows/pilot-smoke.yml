@@ -1,0 +1,17 @@
+name: Pilot runner smoke test
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  smoke:
+    runs-on: [self-hosted, Linux, ARM64, repo-runner-pilot]
+    timeout-minutes: 5
+    steps:
+      - name: Check native ARM64 Linux execution
+        shell: bash
+        run: |
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = aarch64
