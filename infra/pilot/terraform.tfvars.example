@@ -1,0 +1,20 @@
+aws_region         = "us-east-1"
+sandbox_account_id = "111111111111"
+vpc_id             = "vpc-00000000000000000"
+subnet_ids         = ["subnet-00000000000000000"]
+pilot_repository   = "example-org/private-runner-pilot"
+
+github_app_parameters = {
+  id_ssm = {
+    name = "/repo-runner/pilot/app-id"
+    arn  = "arn:aws:ssm:us-east-1:111111111111:parameter/repo-runner/pilot/app-id"
+  }
+  key_base64_ssm = {
+    name = "/repo-runner/pilot/app-key-base64"
+    arn  = "arn:aws:ssm:us-east-1:111111111111:parameter/repo-runner/pilot/app-key-base64"
+  }
+  webhook_secret_ssm = {
+    name = "/repo-runner/pilot/webhook-secret"
+    arn  = "arn:aws:ssm:us-east-1:111111111111:parameter/repo-runner/pilot/webhook-secret"
+  }
+}
