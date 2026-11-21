@@ -7,7 +7,7 @@ Use this guide to install one disposable Linux ARM64 GitHub Actions runner in an
 - Have a GitHub organization owner designate a private pilot repository and merge the [manual smoke workflow](../../.github/workflows/pilot-smoke.yml) into its default branch. Use the label `repo-runner-pilot` and keep the test manual.
 - Approve the AWS account, region, pilot spending target, and operator access. Use a named AWS CLI profile. Record the intended account ID and compare it with `aws sts get-caller-identity --profile "$AWS_PROFILE"` before planning or deploying.
 - Select existing public subnets in the same VPC with an active internet gateway route. Verify that the sandbox can launch `t4g.small` in at least one selected zone. The worker uses a temporary public IPv4 address and a security group with no inbound rules. It needs no NAT gateway. The control plane, storage, and logs can still generate usage between jobs.
-- Prepare a dedicated S3 state bucket with public access blocked, server-side encryption, and versioning. Limit access to operators and enable Terraform S3 locking. Record the bucket and state key so another operator can resume the work.
+- Choose a dedicated S3 state bucket and a unique state key. Keep access limited to operators. The installer creates the bucket after confirmation or verifies an existing bucket's region, ownership, public access block, encryption, and versioning. In `us-east-1`, provide an existing bucket.
 
 ## 2. Create the pilot GitHub App
 
@@ -26,9 +26,9 @@ Supply only parameter names and ARNs to Terraform. Keep parameter values, PEM fi
 ## 3. Review and deploy
 
 1. Check out a reviewed Repo Runner commit. Follow [the Terraform pilot README](../../infra/pilot/README.md) to download and verify the pinned Lambda archives. Use Terraform 1.10 or later and the committed provider lockfile.
-2. In `infra/pilot`, prepare an untracked variable file using [the example](../../infra/pilot/terraform.tfvars.example). Set the approved region and account, VPC, subnets, private pilot repository, and SSM parameter references. Initialize against the approved S3 bucket and state key as described in the Terraform README.
-3. Run `terraform plan -input=false -out=pilot.tfplan` in a restricted working directory. Review the target account, repository scope, worker IAM, no-inbound security group, temporary public IP, worker cap of one, and expected idle resources. Verify the plan includes no running EC2 instance. Investigate unexpected changes before continuing.
-4. With explicit approval, apply the reviewed plan with `terraform apply -input=false pilot.tfplan`. Read the endpoint with `terraform output -raw webhook_endpoint`.
+2. In `infra/pilot`, prepare an untracked `terraform.tfvars` using [the example](../../infra/pilot/terraform.tfvars.example). Set the VPC, subnets, a unique resource prefix, the private pilot repository, and the SSM parameter references. In your shell, export `AWS_PROFILE`, `PILOT_AWS_REGION`, `PILOT_AWS_ACCOUNT`, `PILOT_STATE_BUCKET`, and `PILOT_STATE_KEY`. The installer passes the region and account to Terraform explicitly.
+3. Run `bash install.sh state` and verify the selected backend. If creation only partially succeeds, fix the missing bucket settings as an operator before rerunning the check. Then run `bash install.sh plan /absolute/private/path/pilot.tfplan`, substituting a new path in a restricted directory. The installer verifies the account, bucket, and release-asset checksums, initializes Terraform with locking, and saves the plan with a context file. Keep both files together.
+4. Review the target account, repository scope, runner IAM, no-inbound security group, temporary public IP, worker cap, and idle resources. The plan should include no running EC2 instance. With approval, run `bash install.sh apply /absolute/private/path/pilot.tfplan`. The installer previews the saved plan and asks for confirmation. Read the endpoint with `terraform output -raw webhook_endpoint`.
 5. In the GitHub App settings, enable the webhook, enter the endpoint and the same secret stored in Parameter Store, leave SSL verification enabled, and subscribe to **Workflow job**. Verify the installation still names only the pilot repo.
 
 ## 4. Prove the runner works
@@ -41,7 +41,7 @@ Supply only parameter names and ARNs to Terraform. Keep parameter values, PEM fi
 ## 5. Pause or tear down
 
 - **Pause:** Disable the GitHub App webhook, confirm the queue is drained and workers and disks are gone. Scheduled AWS tasks and storage remain provisioned. Re-enable the webhook when ready to resume.
-- **Remove the stack:** Disable the webhook, let active jobs finish or cancel them explicitly, and verify worker cleanup. Plan with `terraform plan -destroy -input=false -out=pilot-destroy.tfplan`, using the same backend, inputs, and account. Review the exact deletions and obtain approval before applying the saved destroy plan. Verify stack resources are gone. If a nonempty versioned bucket blocks teardown, review its contents and retention requirements before asking for deletion approval.
+- **Remove the stack:** Disable the webhook, let active jobs finish or cancel them explicitly, and verify worker cleanup. Use `bash install.sh destroy-plan /absolute/private/path/pilot-destroy.tfplan` with the same backend, inputs, and account. Review the exact deletions and obtain approval before running `bash install.sh apply` with that saved plan's path. Verify stack resources are gone. If a nonempty versioned bucket blocks teardown, review its contents and retention requirements before asking for deletion approval.
 - **Retire external setup:** The state bucket, SSM inputs, GitHub App, and private repository were created outside the stack. Decide which to retain. For permanent retirement, have the operator revoke the App key and remove the installation and secret parameters. Archive state securely or remove it under the approved retention policy.
 
 For the next rehearsal, have a second operator use a clean sandbox and this guide. Measure time from prerequisites ready to first passing job, log each point where the operator needed help, and verify teardown independently.
