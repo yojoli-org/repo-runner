@@ -1,6 +1,8 @@
 # AWS ARM64 sandbox pilot
 
-This root module wraps the MIT-licensed [upstream v8.1.1 release](https://github.com/github-aws-runners/terraform-aws-github-runner/releases/tag/v8.1.1). It targets a dedicated private GitHub sandbox repository and configures a maximum of one On-Demand `t4g.small` runner. The 2 GiB instance is sized for the smoke test. Validate heavy jobs separately on a larger approved runner profile. Check account eligibility and potential charges before deployment. The upstream cleanup pass and other control-plane services can still incur charges at zero workers.
+For the complete GitHub and AWS workflow, use the [sandbox operator guide](../../docs/pilots/operator-guide.md).
+
+This root module wraps the MIT-licensed [upstream v8.1.1 release](https://github.com/github-aws-runners/terraform-aws-github-runner/releases/tag/v8.1.1). It targets a dedicated private GitHub sandbox repository and configures a maximum of one On-Demand `t4g.small` runner. Use this 2 GiB starting point for the smoke test and measure representative workloads before choosing a production size. Check account eligibility and potential charges before deployment. The upstream cleanup pass and other control-plane services can still incur charges at zero workers.
 
 From this directory, fetch and verify the pinned deployment assets and validate the configuration locally:
 
