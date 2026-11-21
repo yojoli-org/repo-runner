@@ -6,4 +6,4 @@ Repo Runner provides generic runner infrastructure. Read [the Yojoli pilot](docs
 
 Use a pinned upstream Terraform module. Prefer documented configuration and bootstrap hooks. Propose upstream changes before committing to a fork.
 
-Keep customer code, credentials, Terraform state and plan files out of the repository. Use synthetic fixtures and sandbox infrastructure. Cloud applies, IAM and GitHub access changes, paid resources, and customer workflow routing changes require explicit maintainer authorization. The smoke workflow is manual and must only be dispatched against an approved pilot pool.
+Keep customer code, credentials, Terraform state and plan files out of the repository. Use synthetic fixtures and sandbox infrastructure. Cloud applies, IAM and GitHub access changes, paid resources, and customer workflow routing changes require explicit maintainer authorization. Copy the manual smoke workflow to the approved private sandbox repository and dispatch it there against the dedicated pilot pool.
