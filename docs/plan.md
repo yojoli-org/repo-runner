@@ -39,4 +39,6 @@ The server-side exchange helper in `onboarding/` accepts an atomic attempt-claim
 
 The registration attempt adapter targets a DynamoDB table with a string `id` partition key and numeric `expiresAt` TTL. It stores a hash of the callback state and claims it only once, within ten minutes, for the same tenant and user. The attempt records the approved AWS destination. The callback obtains that destination from the claimed attempt.
 
+Deploy a [shared attempt table per portal environment](../infra/portal-state/README.md) in Repo Runner's AWS account. Keep customer credentials and infrastructure in the customer account.
+
 Before enabling the flow, connect authenticated HTTP routes, provision the attempt table, and wire the AWS clients. Bind the AWS writer to the approved account, region, and parameter path. Redact callback URLs and conversion responses from logs. Verify the actual repository selection before planning. After the approved deployment, configure the webhook and verify delivery. Record step completion so a retry resumes the existing App and deployment. If code exchange succeeded but credential storage failed, stop and provide a credential recovery path because the code cannot be reused and Parameter Store writes may be partial. Until these steps pass in a fresh sandbox, use the guided operator setup.
