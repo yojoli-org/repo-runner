@@ -25,6 +25,8 @@ Customers define when their CI workflows should queue jobs. Repo Runner provisio
 
 ## Portal onboarding
 
+Repo Runner is a Yojoli product. The public product page belongs on the main Yojoli site. Host the signed-in console on a dedicated Yojoli subdomain so its browser origin and tab storage are separate from the public site. Keep the portal backend in the operator AWS account and customer runner infrastructure in the customer's account. Yojoli routing, product-page deployment, DNS, and certificate validation are separate operator-approved changes.
+
 Start with GitHub source control, GitHub Actions, and AWS runner hosting. The customer selects repositories and a starter pool, grants scoped access on the provider's own authorization pages, and chooses which setup steps to delegate. Where an API and the approved permissions allow it, Repo Runner makes the changes and verifies the result. For customer-owned steps, show the exact action and how to resume. Report missing privileges at the step that needs them.
 
 Preview the target account, repositories, infrastructure, and capacity limits before applying. A backend worker will apply the exact approved plan and report progress, then run a smoke test and verify cleanup. Keep workflow edits a separately approved option. The CLI installer remains available for operators and self-hosters. Share deployment logic between the two once the terminal prompts have been separated from execution.

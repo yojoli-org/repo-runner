@@ -1,6 +1,8 @@
 # Sandbox portal hosting and sign-in
 
-This stack serves the sandbox browser page through CloudFront from a private S3 bucket and creates an invite-only Cognito user pool. It uses the default CloudFront HTTPS domain and a Cognito managed login domain. It does not create a user or grant access to customer AWS accounts.
+This stack serves the sandbox browser page through CloudFront from a private S3 bucket and creates an invite-only Cognito user pool. It supports a dedicated console subdomain or the default CloudFront HTTPS hostname for isolated testing. It does not create a user or grant access to customer AWS accounts.
+
+For a custom console hostname, set `custom_domain.hostname` and `custom_domain.certificate_arn`. The certificate must be issued in ACM in `us-east-1`, in the portal account, and cover the console hostname. After deployment, have the DNS owner point the hostname at `portal_dns_target` and verify HTTPS before testing sign-in. The console hostname becomes the Cognito callback origin and should also be the API's allowed browser origin. [CloudFront certificate requirements](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cnames-and-https-requirements.html)
 
 Use the approved Repo Runner portal AWS account and its encrypted, versioned Terraform backend. Give this stack a separate state key from the portal API and both runner pilots. Choose a unique `prefix` and review the plan before applying.
 

@@ -45,13 +45,27 @@ variable "api_origin" {
   }
 }
 
+variable "custom_domain" {
+  description = "Optional console hostname and its issued CloudFront certificate."
+  type        = object({ hostname = string, certificate_arn = string })
+  default     = null
+
+  validation {
+    condition = var.custom_domain == null ? true : (
+      can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", var.custom_domain.hostname)) &&
+      can(regex("^arn:aws:acm:us-east-1:${var.portal_aws_account_id}:certificate/[0-9a-f-]+$", var.custom_domain.certificate_arn))
+    )
+    error_message = "Provide a lowercase DNS hostname and an ACM certificate ARN in us-east-1 in the portal AWS account."
+  }
+}
+
 provider "aws" {
   region              = var.portal_aws_region
   allowed_account_ids = [var.portal_aws_account_id]
 }
 
 locals {
-  portal_origin  = "https://${aws_cloudfront_distribution.portal.domain_name}"
+  portal_origin  = "https://${var.custom_domain == null ? aws_cloudfront_distribution.portal.domain_name : var.custom_domain.hostname}"
   cognito_origin = "https://${var.prefix}.auth.${var.portal_aws_region}.amazoncognito.com"
   api_scope      = "repo-runner/register"
 }
@@ -109,4 +123,9 @@ output "portal_sign_in" {
     scope        = local.api_scope
     user_pool_id = aws_cognito_user_pool.portal.id
   }
+}
+
+output "portal_dns_target" {
+  description = "CloudFront DNS target for the console hostname. Create the DNS record separately."
+  value       = aws_cloudfront_distribution.portal.domain_name
 }

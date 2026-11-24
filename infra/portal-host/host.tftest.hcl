@@ -36,3 +36,35 @@ run "private_host_and_invite_only_sign_in" {
     error_message = "Use a public authorization-code client and publish browser config only after setting the API origin."
   }
 }
+
+run "use_console_hostname_for_sign_in" {
+  command = plan
+
+  variables {
+    custom_domain = {
+      hostname        = "runner.example.test"
+      certificate_arn = "arn:aws:acm:us-east-1:111111111111:certificate/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    }
+  }
+
+  assert {
+    condition = contains(aws_cloudfront_distribution.portal.aliases, "runner.example.test") && (
+      output.portal_sign_in.origin == "https://runner.example.test" &&
+      contains(aws_cognito_user_pool_client.portal.callback_urls, "https://runner.example.test/")
+    )
+    error_message = "Use the console hostname throughout CloudFront and Cognito."
+  }
+}
+
+run "reject_other_account_certificate" {
+  command = plan
+
+  variables {
+    custom_domain = {
+      hostname        = "runner.example.test"
+      certificate_arn = "arn:aws:acm:us-east-1:222222222222:certificate/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    }
+  }
+
+  expect_failures = [var.custom_domain]
+}

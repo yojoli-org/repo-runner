@@ -47,6 +47,7 @@ resource "aws_cloudfront_distribution" "portal" {
   enabled             = true
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
+  aliases             = var.custom_domain == null ? [] : [var.custom_domain.hostname]
 
   origin {
     domain_name              = aws_s3_bucket.portal.bucket_regional_domain_name
@@ -67,7 +68,12 @@ resource "aws_cloudfront_distribution" "portal" {
     geo_restriction { restriction_type = "none" }
   }
 
-  viewer_certificate { cloudfront_default_certificate = true }
+  viewer_certificate {
+    cloudfront_default_certificate = var.custom_domain == null
+    acm_certificate_arn            = try(var.custom_domain.certificate_arn, null)
+    ssl_support_method             = var.custom_domain == null ? null : "sni-only"
+    minimum_protocol_version       = var.custom_domain == null ? null : "TLSv1.2_2021"
+  }
 }
 
 resource "aws_s3_bucket_policy" "portal" {
