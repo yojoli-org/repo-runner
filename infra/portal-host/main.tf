@@ -35,13 +35,12 @@ variable "prefix" {
   }
 }
 
-variable "api_origin" {
-  description = "Portal API HTTPS origin. Leave unset until the protected API is deployed."
+variable "portal_origin" {
+  description = "Cloudflare-hosted console origin for this environment."
   type        = string
-  default     = null
   validation {
-    condition     = var.api_origin == null || can(regex("^https://[A-Za-z0-9.-]+$", var.api_origin))
-    error_message = "Provide the HTTPS API origin without a path or trailing slash."
+    condition     = can(regex("^https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", var.portal_origin))
+    error_message = "Provide an HTTPS origin with a lowercase DNS hostname and no path or trailing slash."
   }
 }
 
@@ -51,7 +50,6 @@ provider "aws" {
 }
 
 locals {
-  portal_origin  = "https://${aws_cloudfront_distribution.portal.domain_name}"
   cognito_origin = "https://${var.prefix}.auth.${var.portal_aws_region}.amazoncognito.com"
   api_scope      = "repo-runner/register"
 }
@@ -87,7 +85,7 @@ resource "aws_cognito_user_pool_client" "portal" {
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", local.api_scope]
-  callback_urls                        = ["${local.portal_origin}/"]
+  callback_urls                        = ["${var.portal_origin}/"]
   supported_identity_providers         = ["COGNITO"]
   prevent_user_existence_errors        = "ENABLED"
   explicit_auth_flows                  = ["ALLOW_REFRESH_TOKEN_AUTH"]
@@ -102,8 +100,9 @@ resource "aws_cognito_user_pool_client" "portal" {
 output "portal_sign_in" {
   description = "Values for the portal API authorizer and approved callback configuration."
   value = {
-    origin       = local.portal_origin
-    callback_url = "${local.portal_origin}/"
+    origin       = var.portal_origin
+    callback_url = "${var.portal_origin}/"
+    login_origin = local.cognito_origin
     issuer       = "https://cognito-idp.${var.portal_aws_region}.amazonaws.com/${aws_cognito_user_pool.portal.id}"
     audience     = aws_cognito_user_pool_client.portal.id
     scope        = local.api_scope
