@@ -10,7 +10,7 @@ function httpsUrl(value) {
 
 // Call on the server. Persist state against the authenticated installation
 // attempt before returning the form fields to the browser.
-export function createRegistration({ organization, appName, homepage, redirectUrl }) {
+export function createRegistration({ organization, appName, homepage, redirectUrl, localCallback = false }) {
   if (!/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(organization ?? '')) {
     throw new Error('Provide a GitHub organization login.');
   }
@@ -19,6 +19,10 @@ export function createRegistration({ organization, appName, homepage, redirectUr
   }
 
   const appHomepage = httpsUrl(homepage);
+  const callback = new URL(redirectUrl);
+  const loopback = localCallback && callback.protocol === 'http:' && callback.hostname === '127.0.0.1'
+    && callback.port && callback.pathname === '/callback' && !callback.search
+    && !callback.username && !callback.password && !callback.hash;
   const state = randomBytes(32).toString('hex');
   const action = new URL(`https://github.com/organizations/${organization}/settings/apps/new`);
   action.searchParams.set('state', state);
@@ -30,7 +34,7 @@ export function createRegistration({ organization, appName, homepage, redirectUr
       manifest: JSON.stringify({
         name: appName.trim(),
         url: appHomepage,
-        redirect_url: httpsUrl(redirectUrl),
+        redirect_url: loopback ? callback.href : httpsUrl(redirectUrl),
         public: false,
         // GitHub validates the webhook URL even with delivery disabled.
         hook_attributes: { url: new URL('/webhook-not-configured', appHomepage).href, active: false },

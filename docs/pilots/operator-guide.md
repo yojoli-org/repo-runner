@@ -11,6 +11,23 @@ Use this guide to install one disposable Linux ARM64 GitHub Actions runner in an
 
 ## 2. Create the pilot GitHub App
 
+### Customer-side App setup (experimental)
+
+With Node.js 22.18 or later, use this command from the repository root on the same machine as the browser. It uses your signed-in AWS CLI profile to check the target account and write the App credentials directly to your Parameter Store. You need permission to describe parameters and write the three names under the chosen path, including encryption through SSM. A distinct path keeps the rehearsal separate from existing installations.
+
+```bash
+node onboarding/customer-app-bootstrap.mjs \
+  --profile customer-sandbox --region us-east-2 --account 123456789012 \
+  --organization example-org --app-name 'Repo Runner Sandbox' \
+  --homepage https://example.com --path /repo-runner/customer-sandbox
+```
+
+Open the temporary local link and approve App creation in GitHub. When the command finishes, install the App on the approved private repository only. Use the same parameter path in the Terraform inputs. Enable the webhook after deployment as described below. The loopback callback has synthetic test coverage and still needs a live GitHub rehearsal.
+
+If GitHub creates the App but setup fails, check the App and parameter metadata before retrying. Partial writes may need operator cleanup.
+
+### Manual setup
+
 Have the organization owner create an organization-owned App and limit its installation to the private pilot repository. Leave the webhook inactive until AWS provides the URL. For repository-scoped runners, set repository **Actions**, **Checks**, and **Metadata** to read-only and **Administration** to read/write. Leave organization permissions unset. Use a separate App for another installation. [Upstream GitHub App setup](https://github-aws-runners.github.io/terraform-aws-github-runner/getting-started/)
 
 Have the operator generate the App private key and a separate random webhook secret, then store these parameters in AWS Systems Manager in the same account and region as the stack:
