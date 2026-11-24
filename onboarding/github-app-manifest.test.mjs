@@ -18,7 +18,7 @@ test('builds a private organization App request with repository permissions', ()
   assert.notEqual(createRegistration(input).state, registration.state);
   assert.deepEqual(JSON.parse(registration.fields.manifest), {
     name: input.appName, url: input.homepage, redirect_url: input.redirectUrl, public: false,
-    hook_attributes: { active: false }, default_events: ['workflow_job'],
+    hook_attributes: { url: 'https://example.test/webhook-not-configured', active: false }, default_events: ['workflow_job'],
     default_permissions: { actions: 'read', checks: 'read', metadata: 'read', administration: 'write' },
   });
 });
