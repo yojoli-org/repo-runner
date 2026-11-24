@@ -1,0 +1,13 @@
+:root { color-scheme: light; background: #f5f1e8; color: #202b23; font: 1rem/1.6 Georgia, serif; }
+body { max-width: 58rem; margin: auto; padding: 0 clamp(1rem, 5vw, 4rem); }
+header { display: flex; justify-content: space-between; align-items: baseline; padding: 1.25rem 0; border-bottom: 1px solid #998f79; font-weight: bold; }
+header span { color: #4d5b4d; font: .8rem/1.5 ui-monospace, monospace; text-transform: uppercase; letter-spacing: .1em; }
+main { max-width: 41rem; padding: clamp(2rem, 8vw, 6rem) 0; }
+h1 { font-size: clamp(2.7rem, 8vw, 5rem); line-height: .98; letter-spacing: -.055em; margin: 0 0 1.5rem; }
+p { font-size: 1.125rem; max-width: 35rem; }
+#status { border-left: 3px solid #396743; padding: .5rem .85rem; margin: 2rem 0 1rem; background: #e6ebdd; }
+.actions { display: flex; flex-wrap: wrap; gap: .65rem; }
+button { font: 700 .92rem/1.25 ui-monospace, monospace; color: #fff; background: #244e32; border: 1px solid #244e32; padding: .75rem 1rem; cursor: pointer; }
+button.secondary { color: #244e32; background: transparent; }
+button:focus-visible { outline: 3px solid #aa532a; outline-offset: 3px; }
+button:disabled { opacity: .65; cursor: wait; }

@@ -1,6 +1,7 @@
 # Local .terraform directories
 .terraform/
 node_modules/
+portal/config.json
 
 # .tfstate files
 *.tfstate
