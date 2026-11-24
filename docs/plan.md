@@ -25,7 +25,7 @@ Customers define when their CI workflows should queue jobs. Repo Runner provisio
 
 ## Portal onboarding
 
-Repo Runner is a Yojoli product. The public product page belongs at `yojoli.com/repo-runner`. Use `repo-runner.yojoli.com` for the signed-in customer console and `repo-runner-stg.yojoli.com` for invite-only staging. Give staging its own sign-in configuration, API, attempt table, and Terraform state. Keep the portal backend in the operator AWS account and customer runner infrastructure in the customer's account. Yojoli routing, product-page deployment, DNS, and certificate validation are separate operator-approved changes.
+Repo Runner is a Yojoli product. The public product page belongs at `yojoli.com/repo-runner`. Use `repo-runner.yojoli.com` for the signed-in customer console and `https://repo-runner-stg.dansward.workers.dev` for invite-only staging. Serve the staging browser assets from a Cloudflare Worker named `repo-runner-stg`. Give staging its own sign-in configuration, API, attempt table, and Terraform state. Keep the portal backend in the operator AWS account and customer runner infrastructure in the customer's account. Yojoli routing, product-page deployment, DNS, and certificate validation are separate operator-approved changes.
 
 Start with GitHub source control, GitHub Actions, and AWS runner hosting. The customer selects repositories and a starter pool, grants scoped access on the provider's own authorization pages, and chooses which setup steps to delegate. Where an API and the approved permissions allow it, Repo Runner makes the changes and verifies the result. For customer-owned steps, show the exact action and how to resume. Report missing privileges at the step that needs them.
 

@@ -6,7 +6,7 @@ For a custom console hostname, set `custom_domain.hostname` and `custom_domain.c
 
 Use the approved Repo Runner portal AWS account and its encrypted, versioned Terraform backend. Give this stack a separate state key from the portal API and both runner pilots. Choose a unique `prefix` and review the plan before applying.
 
-Use `repo-runner-stg.yojoli.com` for the first rehearsal. Reserve `repo-runner.yojoli.com` for the customer console. Keep the host and API state keys, callback URLs, Cognito clients, and attempt tables separate between environments. Scope each API and browser configuration to its matching origin.
+Reserve `repo-runner.yojoli.com` for the customer console. The first rehearsal will serve browser assets through Cloudflare Workers at `https://repo-runner-stg.dansward.workers.dev`. The CloudFront stack in this directory is an option for the customer console and does not configure the Workers staging URL. Before deploying staging, configure Cognito and the protected API to accept the Workers browser origin and callback. Keep state keys, callback URLs, Cognito clients, and attempt tables separate between environments.
 
 1. Deploy this stack with `api_origin` unset. Use the `portal_sign_in` output to get the portal origin, callback URL, Cognito issuer, audience, scope, and pool ID. An authorized operator invites the sandbox user in Cognito and obtains the user's `sub` for the API configuration.
 2. Configure the [protected portal API](../portal-state/README.md) with those values, the approved user subject, and the customer installation record. The manifest redirect URL must match `callback_url`. Review the API plan, deploy it when approved, and configure the customer role trust using the portal runtime role ARN and installation external ID.
