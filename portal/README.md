@@ -1,0 +1,10 @@
+# Sandbox browser portal
+
+Serve `index.html`, `portal.css`, `portal.mjs`, and `oauth.mjs` from an approved HTTPS origin. Publish a `config.json` based on `config.example.json`. It contains public endpoints and the public Cognito app client ID only. Use a dedicated sandbox origin and serve no third-party scripts or resources.
+
+1. Configure a Cognito public app client with authorization-code flow and PKCE, no client secret, and the API's custom access-token scope. Register the exact portal page URL as its callback URL. Use the same page URL as the approved GitHub App manifest redirect. The browser distinguishes the two returns using separate state values held in the originating tab.
+2. Configure the gateway authorizer for the Cognito user-pool issuer, the app client ID or configured resource audience, and the same scope. Set the sandbox configuration to the approved Cognito subject. The Cognito managed login domain and the token issuer are separate settings.
+3. Match `apiOrigin` to the portal API output and `portal_origin` to the browser origin. Disable query logging for the portal return page and API callback at every layer. Configure a response CSP with `connect-src` restricted to your portal, Cognito domain, and API origin, and add `frame-ancestors 'none'` and `Cache-Control: no-store` on the return page.
+4. Sign in and continue to GitHub in the same tab. The page removes the return query from browser history before exchanging or relaying the code. Only the access token is retained in tab storage until its expiry. Clearing the tab session does not sign out of Cognito.
+
+The page completes App registration and credential delivery only. App installation, repository scope verification, webhook configuration, and runner deployment are separate steps. Run `npm test` from the repository root for synthetic protocol checks. A live sandbox rehearsal requires the configured gateway and identity provider.

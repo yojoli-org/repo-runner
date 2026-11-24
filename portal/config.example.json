@@ -1,0 +1,6 @@
+{
+  "cognitoOrigin": "https://login.example.test",
+  "apiOrigin": "https://api.example.test",
+  "clientId": "example-public-client-id",
+  "scope": "registration/start"
+}
