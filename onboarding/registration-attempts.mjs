@@ -43,7 +43,7 @@ export async function startAppRegistration({ identity, config, destination, stor
   return { action: registration.action, fields: registration.fields };
 }
 
-export async function finishAppRegistration({ identity, query, store, saveCredentials, request }) {
+export async function finishAppRegistration({ identity, query, store, saveCredentials, request, report = () => {} }) {
   const states = query.getAll('state');
   const codes = query.getAll('code');
   if (states.length !== 1 || !/^[a-f0-9]{64}$/.test(states[0])
@@ -52,6 +52,7 @@ export async function finishAppRegistration({ identity, query, store, saveCreden
   }
   const claimed = await store.claim({ ...identity, state: states[0] });
   if (!claimed) throw new Error('GitHub App registration expired or was already used.');
+  report('registration_attempt_claimed');
 
   return completeRegistration({
     query,
@@ -60,5 +61,6 @@ export async function finishAppRegistration({ identity, query, store, saveCreden
     consumeAttempt: async () => true,
     saveCredentials,
     request,
+    report,
   });
 }

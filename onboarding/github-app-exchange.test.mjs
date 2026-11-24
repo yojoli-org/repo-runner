@@ -63,3 +63,14 @@ test('stops partial writes without publishing the App ID', async () => {
   await assert.rejects(saveAppParameters(put, '/repo-runner/pilot', {}), /Parameter write failed/);
   assert.equal(put.mock.callCount(), 1);
 });
+
+test('reports a missing webhook secret with a fixed diagnostic and skips storage', async () => {
+  const report = test.mock.fn();
+  const saveCredentials = test.mock.fn();
+  await assert.rejects(completeRegistration({ query, attempt, consumeAttempt: async () => true,
+    request: async () => ({ ok: true, json: async () => ({ ...app, webhook_secret: null }) }),
+    saveCredentials, report,
+  }), /unexpected App details/);
+  assert.deepEqual(report.mock.calls.map(({ arguments: args }) => args), [['github_app_webhook_secret_missing']]);
+  assert.equal(saveCredentials.mock.callCount(), 0);
+});

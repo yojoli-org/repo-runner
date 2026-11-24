@@ -7,7 +7,7 @@ const json = (body, status = 200) => Response.json(body, { status, headers: resp
 // Use a portal-account DynamoDB document client here. customerAws must return
 // STS and SSM operations bound to the approved customer's role and region.
 export function createPortalRegistrationHandlers({ portalOrigin, authenticate, approvedInstallation,
-  tableName, dynamodb, customerAws, request }) {
+  tableName, dynamodb, customerAws, request, report = () => {} }) {
   const origin = new URL(portalOrigin).origin;
   if (!origin.startsWith('https://')) throw new Error('Configure an HTTPS portal origin.');
   const store = createAttemptStore({ tableName, put: (input) => dynamodb.put(input), update: (input) => dynamodb.update(input) });
@@ -45,9 +45,10 @@ export function createPortalRegistrationHandlers({ portalOrigin, authenticate, a
         const identity = await session(httpRequest);
         if (!identity) return json({ error: 'Sign in as the person who started setup.' }, 401);
         const result = await finishAppRegistration({
-          identity, query: new URL(httpRequest.url).searchParams, store, request,
+          identity, query: new URL(httpRequest.url).searchParams, store, request, report,
           saveCredentials: async ({ destination }, credentials) => {
             const aws = await customerAws(destination);
+            report('customer_role_assumed');
             const caller = await aws.getCallerIdentity();
             if (!/^\d{12}$/.test(destination.accountId) || caller.Account !== destination.accountId) {
               throw new Error('AWS account does not match the approved installation.');

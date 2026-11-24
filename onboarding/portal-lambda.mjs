@@ -59,6 +59,7 @@ export async function handler(event) {
       portalRegion: process.env.AWS_REGION,
       portalAccountId: process.env.PORTAL_AWS_ACCOUNT_ID,
       tableName: process.env.REGISTRATION_ATTEMPT_TABLE,
+      report: (step) => console.info(JSON.stringify({ event: 'repo_runner_registration', step })),
       sandbox: JSON.parse(process.env.PORTAL_SANDBOX_CONFIGURATION),
     });
     return await runtime(event);
