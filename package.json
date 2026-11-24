@@ -1,0 +1,12 @@
+{
+  "name": "repo-runner",
+  "private": true,
+  "engines": { "node": ">=22" },
+  "scripts": { "test": "node --test onboarding/*.test.mjs" },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1176.0",
+    "@aws-sdk/client-ssm": "3.1176.0",
+    "@aws-sdk/client-sts": "3.1176.0",
+    "@aws-sdk/lib-dynamodb": "3.1176.0"
+  }
+}
