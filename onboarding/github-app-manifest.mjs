@@ -18,6 +18,7 @@ export function createRegistration({ organization, appName, homepage, redirectUr
     throw new Error('Provide a GitHub App name.');
   }
 
+  const appHomepage = httpsUrl(homepage);
   const state = randomBytes(32).toString('hex');
   const action = new URL(`https://github.com/organizations/${organization}/settings/apps/new`);
   action.searchParams.set('state', state);
@@ -28,10 +29,11 @@ export function createRegistration({ organization, appName, homepage, redirectUr
     fields: {
       manifest: JSON.stringify({
         name: appName.trim(),
-        url: httpsUrl(homepage),
+        url: appHomepage,
         redirect_url: httpsUrl(redirectUrl),
         public: false,
-        hook_attributes: { active: false },
+        // GitHub validates the webhook URL even with delivery disabled.
+        hook_attributes: { url: new URL('/webhook-not-configured', appHomepage).href, active: false },
         default_events: ['workflow_job'],
         default_permissions: { actions: 'read', checks: 'read', metadata: 'read', administration: 'write' },
       }),
