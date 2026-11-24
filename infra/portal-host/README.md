@@ -1,17 +1,13 @@
-# Sandbox portal hosting and sign-in
+# Portal sign-in
 
-This stack serves the sandbox browser page through CloudFront from a private S3 bucket and creates an invite-only Cognito user pool. It supports a dedicated console subdomain or the default CloudFront HTTPS hostname for isolated testing. It does not create a user or grant access to customer AWS accounts.
-
-For a custom console hostname, set `custom_domain.hostname` and `custom_domain.certificate_arn`. The certificate must be issued in ACM in `us-east-1`, in the portal account, and cover the console hostname. After deployment, have the DNS owner point the hostname at `portal_dns_target` and verify HTTPS before testing sign-in. The console hostname becomes the Cognito callback origin and should also be the API's allowed browser origin. [CloudFront certificate requirements](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cnames-and-https-requirements.html)
+This stack creates the invite-only Cognito user pool and public PKCE client for the Cloudflare-hosted console. User invitations and customer account access are separate operator steps.
 
 Use the approved Repo Runner portal AWS account and its encrypted, versioned Terraform backend. Give this stack a separate state key from the portal API and both runner pilots. Choose a unique `prefix` and review the plan before applying.
 
-Reserve `repo-runner.yojoli.com` for the customer console. The first rehearsal will serve browser assets through Cloudflare Workers at `https://repo-runner-stg.dansward.workers.dev`. The CloudFront stack in this directory is an option for the customer console and does not configure the Workers staging URL. Before deploying staging, configure Cognito and the protected API to accept the Workers browser origin and callback. Keep state keys, callback URLs, Cognito clients, and attempt tables separate between environments.
+Set `portal_origin` to `https://repo-runner-stg.dansward.workers.dev` for invite-only staging. Reserve `https://repo-runner.yojoli.com` for the customer console. Keep state keys, callback URLs, Cognito clients, and attempt tables separate between environments.
 
-1. Deploy this stack with `api_origin` unset. Use the `portal_sign_in` output to get the portal origin, callback URL, Cognito issuer, audience, scope, and pool ID. An authorized operator invites the sandbox user in Cognito and obtains the user's `sub` for the API configuration.
+1. Deploy the reviewed identity plan. Use the `portal_sign_in` output to get the portal origin, callback URL, login origin, Cognito issuer, audience, scope, and pool ID. An authorized operator invites the sandbox user in Cognito and obtains the user's `sub` for the API configuration.
 2. Configure the [protected portal API](../portal-state/README.md) with those values, the approved user subject, and the customer installation record. The manifest redirect URL must match `callback_url`. Review the API plan, deploy it when approved, and configure the customer role trust using the portal runtime role ARN and installation external ID.
-3. Set `api_origin` to the API stack's `portal_api_url` and review the host plan. This publishes the browser configuration and adds the API origin to the response CSP. After applying, confirm unsigned API requests are rejected and an authorized sandbox user can sign in. Verify the GitHub return page does not retain the callback query in browser history.
-
-CloudFront does not forward callback query strings to S3, and this stack does not configure request logging. Keep queries out of any additional proxy logs. CloudFront, Cognito, and S3 usage may incur charges. Teardown and user changes require separate approval.
+3. Configure and deploy the [browser portal](../../portal/README.md) to Cloudflare after approval. Confirm unsigned API requests are rejected and an approved sandbox user can sign in. Verify the GitHub return page removes callback parameters from browser history.
 
 Run `terraform fmt -check`, `terraform init -backend=false -lockfile=readonly`, `terraform validate`, and `terraform test` from this directory for local verification.
