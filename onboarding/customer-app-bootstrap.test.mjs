@@ -5,6 +5,7 @@ import { bootstrap } from './customer-app-bootstrap.mjs';
 const config = {
   profile: 'test', account: '123456789012', region: 'us-east-2', organization: 'example-org',
   appName: 'Example customer test', homepage: 'https://example.com', path: '/repo-runner/customer-test',
+  webhookUrl: 'https://example.execute-api.us-east-2.amazonaws.com/webhook',
 };
 const app = {
   id: 123, slug: 'example-test', owner: { login: config.organization },
@@ -35,7 +36,11 @@ test('local GitHub callback checks state and writes to the verified customer acc
   const setup = await ready;
   const form = await fetch(setup);
   assert.equal(form.status, 200);
-  const state = (await form.text()).match(/state=([a-f0-9]{64})/)[1];
+  const html = await form.text();
+  const manifest = JSON.parse(html.match(/name="manifest" value="([^"]+)"/)[1].replaceAll('&quot;', '"'));
+  assert.deepEqual(manifest.hook_attributes, { url: config.webhookUrl, active: true });
+  assert.deepEqual(manifest.default_events, ['workflow_job']);
+  const state = html.match(/state=([a-f0-9]{64})/)[1];
   const callback = new URL('/callback?code=example', setup);
   assert.equal((await fetch(callback)).status, 404);
   callback.searchParams.set('state', state);
@@ -59,4 +64,17 @@ test('wrong account or occupied parameter path stops before GitHub', async () =>
     announce,
     aws: { account: async () => config.account, hasAppParameters: async () => true },
   }), /parameter path is in use/);
+});
+
+test('customer bootstrap refuses an unrelated webhook destination before AWS or GitHub', async () => {
+  for (const webhookUrl of [
+    'http://example.execute-api.us-east-2.amazonaws.com/webhook',
+    'https://example.execute-api.us-west-2.amazonaws.com/webhook',
+    'https://example.com/webhook',
+    'https://example.execute-api.us-east-2.amazonaws.com/webhook?extra=1',
+  ]) {
+    await assert.rejects(bootstrap({ ...config, webhookUrl }, {
+      aws: { account: () => assert.fail('AWS should not be called') },
+    }), /Use the HTTPS webhook endpoint/);
+  }
 });

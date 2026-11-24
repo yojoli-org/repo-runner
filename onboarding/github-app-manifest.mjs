@@ -10,7 +10,7 @@ function httpsUrl(value) {
 
 // Call on the server. Persist state against the authenticated installation
 // attempt before returning the form fields to the browser.
-export function createRegistration({ organization, appName, homepage, redirectUrl, localCallback = false }) {
+export function createRegistration({ organization, appName, homepage, redirectUrl, localCallback = false, webhookUrl }) {
   if (!/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(organization ?? '')) {
     throw new Error('Provide a GitHub organization login.');
   }
@@ -23,6 +23,9 @@ export function createRegistration({ organization, appName, homepage, redirectUr
   const loopback = localCallback && callback.protocol === 'http:' && callback.hostname === '127.0.0.1'
     && callback.port && callback.pathname === '/callback' && !callback.search
     && !callback.username && !callback.password && !callback.hash;
+  const hook = webhookUrl === undefined
+    ? { url: new URL('/webhook-not-configured', appHomepage).href, active: false }
+    : { url: httpsUrl(webhookUrl), active: true };
   const state = randomBytes(32).toString('hex');
   const action = new URL(`https://github.com/organizations/${organization}/settings/apps/new`);
   action.searchParams.set('state', state);
@@ -36,8 +39,7 @@ export function createRegistration({ organization, appName, homepage, redirectUr
         url: appHomepage,
         redirect_url: loopback ? callback.href : httpsUrl(redirectUrl),
         public: false,
-        // GitHub validates the webhook URL even with delivery disabled.
-        hook_attributes: { url: new URL('/webhook-not-configured', appHomepage).href, active: false },
+        hook_attributes: hook,
         default_events: ['workflow_job'],
         default_permissions: { actions: 'read', checks: 'read', metadata: 'read', administration: 'write' },
       }),

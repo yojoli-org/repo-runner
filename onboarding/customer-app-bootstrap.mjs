@@ -31,11 +31,22 @@ function customerSession(profile, region) {
   };
 }
 
-export async function bootstrap({ profile, region, account, organization, appName, homepage, path },
+export async function bootstrap({ profile, region, account, organization, appName, homepage, path, webhookUrl },
   { aws = customerSession(profile, region), request = fetch, announce = console.log, timeoutMs = 600000 } = {}) {
   const names = appParameterNames(path);
   if (!profile || !/^[a-z]{2}(?:-[a-z]+)+-\d+$/.test(region ?? '') || !/^\d{12}$/.test(account ?? '')) {
     throw new Error('Provide an AWS profile, region, and expected account ID.');
+  }
+
+  if (webhookUrl !== undefined) {
+    const endpoint = new URL(webhookUrl);
+    const host = endpoint.hostname;
+    const apiId = host.split('.')[0];
+    if (endpoint.origin !== `https://${host}` || endpoint.username || endpoint.password
+      || !/^[a-z0-9]+$/.test(apiId) || host !== `${apiId}.execute-api.${region}.amazonaws.com`
+      || endpoint.pathname !== '/webhook' || endpoint.search || endpoint.hash) {
+      throw new Error('Use the HTTPS webhook endpoint from the customer pilot deployment.');
+    }
   }
 
   const checkAccount = async () => {
@@ -63,7 +74,7 @@ export async function bootstrap({ profile, region, account, organization, appNam
     const host = `127.0.0.1:${server.address().port}`;
     const origin = `http://${host}`;
     const registration = createRegistration({
-      organization, appName, homepage, redirectUrl: origin + '/callback', localCallback: true,
+      organization, appName, homepage, redirectUrl: origin + '/callback', localCallback: true, webhookUrl,
     });
     let claimed = false;
 
@@ -132,11 +143,11 @@ export async function bootstrap({ profile, region, account, organization, appNam
 if (import.meta.main) {
   try {
     const options = Object.fromEntries(
-      ['profile', 'region', 'account', 'organization', 'app-name', 'homepage', 'path']
+      ['profile', 'region', 'account', 'organization', 'app-name', 'homepage', 'path', 'webhook-url']
         .map((name) => [name, { type: 'string' }]),
     );
     const { values } = parseArgs({ options });
-    const { slug } = await bootstrap({ ...values, appName: values['app-name'] }, {
+    const { slug } = await bootstrap({ ...values, appName: values['app-name'], webhookUrl: values['webhook-url'] }, {
       announce: (url) => console.log('Open this setup link on this machine to approve GitHub App creation:\n' + url),
     });
     console.log(`Credentials saved. Install the App on the approved test repository only: https://github.com/apps/${slug}/installations/new`);

@@ -13,16 +13,17 @@ Use this guide to install one disposable Linux ARM64 GitHub Actions runner in an
 
 ### Customer-side App setup (experimental)
 
-With Node.js 22.18 or later, use this command from the repository root on the same machine as the browser. It uses your signed-in AWS CLI profile to check the target account and write the App credentials directly to your Parameter Store. You need permission to describe parameters and write the three names under the chosen path, including encryption through SSM. A distinct path keeps the rehearsal separate from existing installations.
+First deploy the AWS stack as described in section 3, supplying only the planned parameter names and ARNs. Before starting GitHub setup, read the customer stack’s endpoint. Run the following with Node.js 22.18 or later and dependencies installed from the repository root on the same machine as the browser. It uses your signed-in AWS CLI profile to check the target account and write the App credentials directly to your Parameter Store. You need permission to describe parameters and write the three names under the chosen path, including encryption through SSM. A distinct path keeps the rehearsal separate from existing installations.
 
 ```bash
 node onboarding/customer-app-bootstrap.mjs \
   --profile customer-sandbox --region us-east-2 --account 123456789012 \
   --organization example-org --app-name 'Repo Runner Sandbox' \
-  --homepage https://example.com --path /repo-runner/customer-sandbox
+  --homepage https://example.com --path /repo-runner/customer-sandbox \
+  --webhook-url "$(terraform -chdir=infra/pilot output -raw webhook_endpoint)"
 ```
 
-Open the temporary local link and approve App creation in GitHub. When the command finishes, install the App on the approved private repository only. Use the same parameter path in the Terraform inputs. Enable the webhook after deployment as described below. The loopback callback has synthetic test coverage and still needs a live GitHub rehearsal.
+Open the temporary local link and approve App creation in GitHub. When the command finishes, install the App on the approved private repository only. Use the same parameter path in the Terraform inputs. The manifest enables workflow job deliveries at the deployed endpoint. Install the App only after the command confirms that it wrote the credentials. GitHub can send an initial ping before the credentials arrive. The smoke job verifies delivery after setup.
 
 If GitHub creates the App but setup fails, check the App and parameter metadata before retrying. Partial writes may need operator cleanup.
 
@@ -46,7 +47,7 @@ Supply only parameter names and ARNs to Terraform. Keep parameter values, PEM fi
 2. In `infra/pilot`, prepare an untracked `terraform.tfvars` using [the example](../../infra/pilot/terraform.tfvars.example). Set the VPC, subnets, a unique resource prefix, the private pilot repository, and the SSM parameter references. In your shell, export `AWS_PROFILE`, `PILOT_AWS_REGION`, `PILOT_AWS_ACCOUNT`, `PILOT_STATE_BUCKET`, and `PILOT_STATE_KEY`. The installer passes the region and account to Terraform explicitly.
 3. Run `bash install.sh state` and verify the selected backend. If creation only partially succeeds, fix the missing bucket settings as an operator before rerunning the check. Then run `bash install.sh plan /absolute/private/path/pilot.tfplan`, substituting a new path in a restricted directory. The installer verifies the account, bucket, and release-asset checksums, initializes Terraform with locking, and saves the plan with a context file. Keep both files together.
 4. Review the target account, repository scope, runner IAM, no-inbound security group, temporary public IP, worker cap, and idle resources. The plan should include no running EC2 instance. With approval, run `bash install.sh apply /absolute/private/path/pilot.tfplan`. The installer previews the saved plan and asks for confirmation. Read the endpoint with `terraform output -raw webhook_endpoint`.
-5. In the GitHub App settings, enable the webhook, enter the endpoint and the same secret stored in Parameter Store, leave SSL verification enabled, and subscribe to **Workflow job**. Verify the installation still names only the pilot repo.
+5. For manually created GitHub Apps, enable the webhook, enter the endpoint and the same secret stored in Parameter Store, leave SSL verification enabled, and subscribe to **Workflow job**. Verify the installation still names only the pilot repo.
 
 ## 4. Prove the runner works
 
