@@ -5,7 +5,12 @@ export TF_IN_AUTOMATION=1 AWS_PAGER=''
 
 case ${RR_RECOVERY_PREVIEW:-0} in
   0) ;;
-  1) [[ ${RR_DEPLOY:-0} == 1 ]] ;;
+  1)
+    if [[ ${RR_DEPLOY:-0} != 1 ]]; then
+      echo 'Recovery preview requires the deployment bundle.' >&2
+      exit 2
+    fi
+    ;;
   *) echo 'Invalid recovery preview setting.' >&2; exit 2 ;;
 esac
 
