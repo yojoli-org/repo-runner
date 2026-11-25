@@ -35,6 +35,7 @@ with open('terraform.tfvars.json', 'x') as output:
         'aws_region': region, 'sandbox_account_id': account, 'prefix': prefix,
         'vpc_id': env('PILOT_VPC'), 'subnet_ids': subnets, 'pilot_repository': env('PILOT_REPOSITORY'),
         'scale_up_reserved_concurrent_executions': int(env('RR_SCALE_UP_SLOTS')),
+        'runtime_permissions_boundary_arn': env('PILOT_RUNTIME_BOUNDARY') if os.environ.get('RR_DEPLOY') == '1' else None,
         'github_app_parameters': {'id_ssm': parameter('app-id'), 'key_base64_ssm': parameter('app-key-base64'),
                                   'webhook_secret_ssm': parameter('webhook-secret')},
     }, output)
@@ -80,6 +81,12 @@ plan = json.load(sys.stdin)
 changes = [r for r in plan["resource_changes"] if r["change"]["actions"] not in (["no-op"], ["read"])]
 if not changes or any(r["change"]["actions"] != ["create"] or r["type"] == "aws_instance" for r in changes):
     raise SystemExit("Expected a create-only preview with no running EC2 instances.")
+if os.environ.get("RR_DEPLOY") == "1":
+    boundary = os.environ["PILOT_RUNTIME_BOUNDARY"]
+    path = "/" + os.environ["PILOT_PREFIX"] + "/"
+    roles = [r["change"]["after"] for r in changes if r["type"] == "aws_iam_role"]
+    if not roles or any(role.get("permissions_boundary") != boundary or role.get("path") != path for role in roles):
+        raise SystemExit("Every new role must have the approved permissions boundary and pilot path.")
 print(json.dumps({"result":"preview_ready", "create_count":len(changes), "region":os.environ["AWS_REGION"],
                   "scale_up_reserved_slots":int(os.environ["RR_SCALE_UP_SLOTS"])}))
 '

@@ -58,3 +58,17 @@ variable "scale_up_reserved_concurrent_executions" {
     error_message = "Use 1 for a reserved slot or -1 for shared concurrency."
   }
 }
+
+variable "runtime_permissions_boundary_arn" {
+  description = "Customer-managed permissions boundary for IAM roles created for this runner pool."
+  type        = string
+  default     = null
+
+  validation {
+    condition = var.runtime_permissions_boundary_arn == null ? true : can(regex(
+      "^arn:aws:iam::${var.sandbox_account_id}:policy/[A-Za-z0-9_+=,.@/-]+$",
+      var.runtime_permissions_boundary_arn,
+    ))
+    error_message = "The permissions boundary must be a managed policy in the approved sandbox account."
+  }
+}
