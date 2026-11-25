@@ -40,6 +40,12 @@ bash infra/browser-bootstrap/package-plan.sh /absolute/path/to/runner-assets /pr
 node infra/browser-bootstrap/make-plan-template.mjs --deploy > /private/path/deploy-template.json
 ```
 
-Stage the pair as in the preview instructions. In addition to the preview inputs, prefill `DeploymentRoleName` and `StateBucket`. Use an unused pilot prefix and a private, encrypted, versioned bucket in the same account and region. The AWS console approval authorizes the named sandbox deployment. For a preview first, use the preview template instead.
+Stage the pair as in the preview instructions. In addition to the preview inputs, prefill `DeploymentRoleName`, `StateBucket`, and `RuntimeBoundaryName`. The boundary must be a customer-managed policy in the deployment account. Every runtime role in the saved plan must use that boundary and the pilot IAM path. Use an unused pilot prefix and a private, encrypted, versioned bucket in the same account and region. The AWS console approval authorizes the named sandbox deployment. For a preview first, use the preview template instead.
 
 After deployment, the pool is waiting for GitHub configuration and smoke verification. The CodeBuild job does not receive App credentials. Delete the runner pool using the matching Terraform configuration and state before retiring the bootstrap stack. If a build fails after applying any resources, inspect that state before retrying.
+
+### Deployment role review
+
+The guided rehearsal created resources through API Gateway, EC2 launch templates and security groups, EventBridge, IAM, Lambda, CloudWatch Logs, S3, SQS, and Systems Manager. The CodeBuild policy needs to cover each resource's create and Terraform read operations. CloudTrail management events are a starting inventory. They omit some permissions checked during a call, such as `iam:PassRole`, and do not include ordinary S3 object events by default.
+
+A deployment role must restrict IAM changes to the pilot role and instance-profile path. Require the approved boundary when creating roles, deny removing or changing it, and restrict `iam:PassRole` to the intended AWS services and pilot roles. The deployment role must have no ability to modify the boundary policy or its own permissions. Review the runtime boundary's permissions for the actual pool before a live apply.

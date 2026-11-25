@@ -29,6 +29,7 @@ module "pilot" {
   subnet_ids = var.subnet_ids
 
   github_app                  = var.github_app_parameters
+  role_permissions_boundary   = var.runtime_permissions_boundary_arn
   repository_white_list       = [var.pilot_repository]
   runner_extra_labels         = ["repo-runner-pilot"]
   enable_organization_runners = false

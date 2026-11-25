@@ -45,12 +45,17 @@ if (deploy) {
     Description: 'An existing deployment role approved for this project, state key, and pilot resources.',
   };
   template.Parameters.StateBucket = parameter('[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]');
+  template.Parameters.RuntimeBoundaryName = {
+    ...parameter('rr-runtime-[A-Za-z0-9_-]{1,100}'),
+    Description: 'An existing customer-managed permissions boundary for the runner pool roles.',
+  };
   delete template.Resources.BuildRole;
   build.ServiceRole = sub('arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${DeploymentRoleName}');
   build.TimeoutInMinutes = 15;
   build.Environment.EnvironmentVariables.push(
     { Name: 'RR_DEPLOY', Value: '1' },
     { Name: 'PILOT_STATE_BUCKET', Value: ref('StateBucket') },
+    { Name: 'PILOT_RUNTIME_BOUNDARY', Value: sub('arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${RuntimeBoundaryName}') },
   );
 }
 
