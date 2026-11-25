@@ -4,10 +4,10 @@ import { createAttemptStore, finishAppRegistration, startAppRegistration } from 
 const responseHeaders = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' };
 const json = (body, status = 200) => Response.json(body, { status, headers: responseHeaders });
 
-// Use a portal-account DynamoDB document client here. customerAws must return
-// STS and SSM operations bound to the approved customer's role and region.
+// customerAws must return STS and SSM operations bound to the approved
+// customer's account and region.
 export function createPortalRegistrationHandlers({ portalOrigin, authenticate, approvedInstallation,
-  tableName, dynamodb, customerAws, request, report = () => {} }) {
+  tableName, dynamodb, customerAws, request, report = () => {}, verifiedAwsStep = 'customer_role_assumed' }) {
   const origin = new URL(portalOrigin).origin;
   if (!origin.startsWith('https://')) throw new Error('Configure an HTTPS portal origin.');
   const store = createAttemptStore({ tableName, put: (input) => dynamodb.put(input), update: (input) => dynamodb.update(input) });
@@ -65,7 +65,7 @@ export function createPortalRegistrationHandlers({ portalOrigin, authenticate, a
           identity, query: new URL(httpRequest.url).searchParams, store, request, report,
           saveCredentials: async ({ destination }, credentials) => {
             const aws = await verifiedCustomerAws(destination);
-            report('customer_role_assumed');
+            report(verifiedAwsStep);
             await saveAppParameters((input) => aws.putParameter(input), destination.path, credentials);
           },
         });
