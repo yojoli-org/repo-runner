@@ -3,6 +3,12 @@ set -euo pipefail
 umask 077
 export TF_IN_AUTOMATION=1 AWS_PAGER=''
 
+case ${RR_RECOVERY_PREVIEW:-0} in
+  0) ;;
+  1) [[ ${RR_DEPLOY:-0} == 1 ]] ;;
+  *) echo 'Invalid recovery preview setting.' >&2; exit 2 ;;
+esac
+
 [[ "$(aws sts get-caller-identity --query Account --output text)" == "$EXPECTED_ACCOUNT_ID" ]]
 subnets=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$PILOT_VPC" "Name=subnet-id,Values=$PILOT_SUBNETS" --query 'Subnets[].SubnetId' --output json)
 export RR_ACTUAL_SUBNETS="$subnets"
@@ -77,8 +83,13 @@ if ! "$tf" plan -input=false -out="$work/preview.tfplan" -no-color > "$work/plan
 fi
 "$tf" show -json "$work/preview.tfplan" | python3 -c '
 import json, os, sys
+from collections import Counter
 plan = json.load(sys.stdin)
 changes = [r for r in plan["resource_changes"] if r["change"]["actions"] not in (["no-op"], ["read"])]
+if os.environ.get("RR_RECOVERY_PREVIEW") == "1":
+    counts = Counter("/".join(r["change"]["actions"]) for r in changes)
+    print(json.dumps({"result":"recovery_preview_ready", "actions":dict(counts)}, sort_keys=True))
+    sys.exit(0)
 if not changes or any(r["change"]["actions"] != ["create"] or r["type"] == "aws_instance" for r in changes):
     raise SystemExit("Expected a create-only preview with no running EC2 instances.")
 if os.environ.get("RR_DEPLOY") == "1":
@@ -90,7 +101,7 @@ if os.environ.get("RR_DEPLOY") == "1":
 print(json.dumps({"result":"preview_ready", "create_count":len(changes), "region":os.environ["AWS_REGION"],
                   "scale_up_reserved_slots":int(os.environ["RR_SCALE_UP_SLOTS"])}))
 '
-if [[ ${RR_DEPLOY:-0} == 1 ]]; then
+if [[ ${RR_DEPLOY:-0} == 1 && ${RR_RECOVERY_PREVIEW:-0} == 0 ]]; then
   "$tf" apply -input=false -no-color "$work/preview.tfplan"
   printf '%s\n' 'Runner pool deployed. GitHub setup and smoke verification are pending.'
 fi
