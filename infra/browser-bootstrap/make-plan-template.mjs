@@ -1,5 +1,10 @@
 import { readFileSync } from 'node:fs';
 
+const args = process.argv.slice(2);
+if (args.length > 1 || (args.length === 1 && args[0] !== '--deploy')) {
+  throw new Error('Usage: node make-plan-template.mjs [--deploy]');
+}
+const deploy = args[0] === '--deploy';
 const template = JSON.parse(readFileSync(new URL('./proof.json', import.meta.url)));
 const ref = (name) => ({ Ref: name });
 const sub = (value) => ({ 'Fn::Sub': value });
@@ -32,5 +37,21 @@ template.Resources.BuildRole.Properties.Policies[0].PolicyDocument.Statement.pus
     Resource: sub('arn:${AWS::Partition}:s3:::${SourceBucket}/${SourceKey}') },
   { Effect: 'Allow', Action: ['ec2:DescribeImages', 'ec2:DescribeSubnets'], Resource: '*' },
 );
+
+if (deploy) {
+  template.Description = 'Deploy an isolated Repo Runner pool using a customer-approved CodeBuild service role.';
+  template.Parameters.DeploymentRoleName = {
+    ...parameter('rr-bootstrap-[A-Za-z0-9_-]{1,51}'),
+    Description: 'An existing deployment role approved for this project, state key, and pilot resources.',
+  };
+  template.Parameters.StateBucket = parameter('[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]');
+  delete template.Resources.BuildRole;
+  build.ServiceRole = sub('arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${DeploymentRoleName}');
+  build.TimeoutInMinutes = 15;
+  build.Environment.EnvironmentVariables.push(
+    { Name: 'RR_DEPLOY', Value: '1' },
+    { Name: 'PILOT_STATE_BUCKET', Value: ref('StateBucket') },
+  );
+}
 
 console.log(JSON.stringify(template, null, 2));

@@ -26,3 +26,20 @@ Stage the source ZIP at a unique key under `browser-bootstrap/` in a private, ve
 In the live rehearsal, verify that the exact build reaches `SUCCEEDED` and reports `preview_ready`, the number of planned resources, and the selected Lambda reservation. A 10-slot account should report shared concurrency (`-1`) for this preview. No runner pool should appear in the account. Delete the proof stack and staged source and template versions afterward.
 
 The customer-facing flow will offer details on demand. Applying an approved deployment, wiring GitHub, and showing the result in the portal are separate milestones.
+
+## Browser-started sandbox deployment
+
+The deployment variant uses the same AWS confirmation to start a build that creates a new runner pool. The build checks the customer account and its state bucket, creates a saved plan, rejects changes to existing resources or a plan that launches an EC2 worker, and applies that same plan. It writes encrypted, locked state at `browser-deploy/<pilot-prefix>/pilot.tfstate`. The preview variant remains available on its own.
+
+An AWS administrator must first provide a customer-owned CodeBuild service role named `rr-bootstrap-…`. Scope its trust to the exact CodeBuild project and customer account. Restrict who can modify or start the project, since a caller allowed to override the build inputs can use its service role. Review its permissions for the pinned source object, build logs, the exact state and lock keys, and operations on the dedicated pilot resources. The launcher will use the role only in the account where the stack is created. The deployment template does not grant those permissions. An approved deployment role and its policy still need a live rehearsal.
+
+Generate the deployment pair from the reviewed checkout:
+
+```bash
+bash infra/browser-bootstrap/package-plan.sh /absolute/path/to/runner-assets /private/path/deploy-source.zip --deploy
+node infra/browser-bootstrap/make-plan-template.mjs --deploy > /private/path/deploy-template.json
+```
+
+Stage the pair as in the preview instructions. In addition to the preview inputs, prefill `DeploymentRoleName` and `StateBucket`. Use an unused pilot prefix and a private, encrypted, versioned bucket in the same account and region. The AWS console approval authorizes the named sandbox deployment. For a preview first, use the preview template instead.
+
+After deployment, the pool is waiting for GitHub configuration and smoke verification. The CodeBuild job does not receive App credentials. Delete the runner pool using the matching Terraform configuration and state before retiring the bootstrap stack. If a build fails after applying any resources, inspect that state before retrying.

@@ -2,8 +2,10 @@
 set -euo pipefail
 umask 077
 
-if [[ $# -ne 2 || $1 != /* || $2 != /* || $2 != *.zip || -e $2 || -L $2 ]]; then
-  echo 'Usage: bash package-plan.sh /absolute/runner-assets-directory /absolute/new-bundle.zip' >&2
+mode=${3:---preview}
+if [[ $# -lt 2 || $# -gt 3 || $1 != /* || $2 != /* || $2 != *.zip || -e $2 || -L $2 ||
+  ( $mode != --preview && $mode != --deploy ) ]]; then
+  echo 'Usage: bash package-plan.sh /absolute/runner-assets-directory /absolute/new-bundle.zip [--deploy]' >&2
   exit 2
 fi
 assets=$1
@@ -20,12 +22,14 @@ cp "$assets"/{webhook.zip,runners.zip,runner-binaries-syncer.zip} "$work/artifac
 cd "$work"
 sha_check=$(command -v sha256sum || command -v shasum)
 "$sha_check" -c artifacts.sha256
-# The preview starts from empty local state and cannot be applied through the installer.
-node --input-type=module <<'JS'
+if [[ $mode == --preview ]]; then
+  # The preview starts from empty local state.
+  node --input-type=module <<'JS'
 import { readFileSync, writeFileSync } from 'node:fs';
 const source = readFileSync('main.tf', 'utf8');
 const backend = '  backend "s3" {\n    encrypt      = true\n    use_lockfile = true\n  }\n\n';
 if (!source.includes(backend)) throw new Error('Review the pilot backend block before packaging a preview.');
 writeFileSync('main.tf', source.replace(backend, ''));
 JS
+fi
 (set -o noclobber; zip -q -r - . > "$bundle")
