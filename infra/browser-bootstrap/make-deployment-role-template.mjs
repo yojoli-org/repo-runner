@@ -36,6 +36,8 @@ const logGroups = [
   arn('logs', `log-group:/github-self-hosted-runners/${prefix}/*`),
 ];
 const gateway = `arn:aws:apigateway:${region}::/apis`;
+const apiTagPrefix = `arn:aws:apigateway:${region}::/tags/` +
+  encodeURIComponent(`arn:aws:apigateway:${region}::/v2/apis/`);
 const environmentTag = 'ghr:environment';
 const requestTag = { StringEquals: { ['aws:RequestTag/' + environmentTag]: prefix } };
 const resourceTag = { StringEquals: { ['aws:ResourceTag/' + environmentTag]: prefix } };
@@ -63,7 +65,7 @@ const deploy = { Version: '2012-10-17', Statement: [
   allow(['logs:CreateLogGroup', 'logs:PutRetentionPolicy', 'logs:TagResource', 'logs:ListTagsForResource'], logGroups),
   allow(['logs:DescribeLogGroups', 'lambda:GetAccountSettings', 'ec2:DescribeImages', 'ec2:DescribeSubnets',
     'ec2:DescribeSecurityGroups', 'ec2:DescribeSecurityGroupRules', 'ec2:DescribeLaunchTemplates',
-    'ec2:DescribeLaunchTemplateVersions'], '*', { StringEquals: { 'aws:RequestedRegion': region } }),
+    'ec2:DescribeLaunchTemplateVersions', 'ssm:DescribeParameters'], '*', { StringEquals: { 'aws:RequestedRegion': region } }),
   allow('ec2:CreateSecurityGroup', arn('ec2', 'vpc/' + vpc)),
   allow('ec2:CreateSecurityGroup', arn('ec2', 'security-group/*'), requestTag),
   allow('ec2:CreateLaunchTemplate', arn('ec2', 'launch-template/*'), requestTag),
@@ -72,7 +74,7 @@ const deploy = { Version: '2012-10-17', Statement: [
       ['aws:RequestTag/' + environmentTag]: prefix } }),
   allow(['ec2:AuthorizeSecurityGroupEgress', 'ec2:RevokeSecurityGroupEgress'], arn('ec2', 'security-group/*'), resourceTag),
   allow(['lambda:CreateFunction', 'lambda:GetFunction', 'lambda:GetFunctionConfiguration', 'lambda:GetPolicy',
-    'lambda:GetFunctionConcurrency', 'lambda:PutFunctionConcurrency', 'lambda:ListTags', 'lambda:TagResource'], functions),
+    'lambda:GetFunctionConcurrency', 'lambda:PutFunctionConcurrency', 'lambda:ListVersionsByFunction', 'lambda:ListTags', 'lambda:TagResource'], functions),
   allow('lambda:AddPermission', functions, { StringEquals: {
     'lambda:Principal': ['events.amazonaws.com', 'apigateway.amazonaws.com', 's3.amazonaws.com', 'sqs.amazonaws.com'],
   } }),
@@ -89,6 +91,8 @@ const deploy = { Version: '2012-10-17', Statement: [
   allow(['ssm:PutParameter', 'ssm:GetParameter', 'ssm:ListTagsForResource', 'ssm:AddTagsToResource'],
     arn('ssm', `parameter/github-action-runners/${prefix}/*`)),
   allow('apigateway:POST', gateway, requestTag),
+  // API Gateway checks the encoded tag resource when creating a tagged HTTP API.
+  allow('apigateway:POST', apiTagPrefix + '*'),
   allow('apigateway:POST', ['integrations', 'routes', 'stages'].map((child) => `${gateway}/*/${child}`)),
   allow('apigateway:GET', [gateway + '/*', `arn:aws:apigateway:${region}::/tags/*`]),
 ] };
