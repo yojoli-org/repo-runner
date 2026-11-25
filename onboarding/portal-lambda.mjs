@@ -9,7 +9,7 @@ const failure = (statusCode, error) => ({ statusCode, headers: safeHeaders, body
 
 // Expose only through API Gateway with a JWT authorizer on both routes and
 // a resource policy limiting invocation to that gateway. Never log the event.
-export function createPortalLambda({ portalOrigin, sandbox, smokeRoutes, ...awsOptions }, connect = createAwsPortalHandlers) {
+export function createPortalLambda({ portalOrigin, sandbox, smokeRoutes, deploymentRoute, ...awsOptions }, connect = createAwsPortalHandlers) {
   const origin = new URL(portalOrigin).origin;
   const { issuer, subject, tenantId, installation } = sandbox;
   if (!origin.startsWith('https://') || ![issuer, subject, tenantId].every((value) => typeof value === 'string' && value)) {
@@ -20,6 +20,9 @@ export function createPortalLambda({ portalOrigin, sandbox, smokeRoutes, ...awsO
   const routes = {
     [startPath]: { method: 'POST', handler: 'start' },
     [callbackPath]: { method: 'GET', handler: 'callback' },
+    ...(deploymentRoute && {
+      '/api/onboarding/deployment/status': { method: 'GET', handler: 'deploymentStatus' },
+    }),
     ...(smokeRoutes && {
       '/api/onboarding/smoke/start': { method: 'POST', handler: 'startSmoke' },
       '/api/onboarding/smoke/status': { method: 'GET', handler: 'smokeStatus' },
