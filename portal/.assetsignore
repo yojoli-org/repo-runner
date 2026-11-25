@@ -5,3 +5,4 @@
 !oauth.mjs
 !config.json
 !_headers
+!aws-deployment.mjs

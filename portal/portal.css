@@ -11,3 +11,10 @@ button { font: 700 .92rem/1.25 ui-monospace, monospace; color: #fff; background:
 button.secondary { color: #244e32; background: transparent; }
 button:focus-visible { outline: 3px solid #aa532a; outline-offset: 3px; }
 button:disabled { opacity: .65; cursor: wait; }
+
+.deployment { display: grid; gap: .5rem 1.5rem; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); margin: 1.6rem 0 1rem; }
+.deployment dt { color: #4d5b4d; font: .75rem/1.5 ui-monospace, monospace; text-transform: uppercase; letter-spacing: .08em; }
+.deployment dd { margin: .25rem 0 0; overflow-wrap: anywhere; }
+.deploy { display: inline-flex; gap: .8rem; align-items: center; background: #244e32; color: white; font: 700 .92rem/1.25 ui-monospace, monospace; text-decoration: none; padding: .75rem 1rem; margin-bottom: 1rem; }
+.deploy:hover { background: #173a25; }
+.deploy:focus-visible { outline: 3px solid #aa532a; outline-offset: 3px; }
