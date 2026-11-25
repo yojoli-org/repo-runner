@@ -88,3 +88,15 @@ The IAM template creates the role and boundary only in the named account and reg
 For a failed apply, review the recovery plan before attempting another deployment. Run the reviewed deployment bundle on the same project and state key with `RR_RECOVERY_PREVIEW=1`. The job reports counts of planned actions, including replacements, and exits before apply. When changing the source bundle, update the approved role's exact source version first. Any replacement or deletion requires a separately reviewed recovery or teardown plan.
 
 The browser deployment bundle omits tags from the HTTP API's default stage. The pinned upstream module tags the stage during creation, and AWS reported a tagging action that IAM Access Analyzer rejected as invalid. The build applies a targeted Terraform override after module initialization. The parent API retains the pilot tag. Recheck the override when upgrading the module.
+
+## One AWS approval for the deployment rehearsal
+
+An operator can generate a combined template that installs the scoped IAM role and launches the deployment project in one stack. Add the approved `repository` and an array of unique `subnets` to the same role settings JSON used above. These settings, the source object version, and the Terraform state namespace are fixed in the generated template. There are no editable Quick Create parameters that could make the deployment differ from the generated IAM policy.
+
+```bash
+node infra/browser-bootstrap/make-combined-deploy-template.mjs /private/path/role-settings.json > /private/path/combined-template.json
+```
+
+Stage the deployment bundle and combined template in the private customer bucket. Use the Quick Create link with the exact `project` value as the stack name. In the customer account, one named-IAM acknowledgment and stack creation authorize both the IAM resources and the sandbox deployment job. If the account, region, or stack name differs, CloudFormation skips every resource and returns no build ID.
+
+A successful stack creation confirms dispatch only. Follow its `BuildId` to verify the runner pool deployment. Use the matching Terraform state to remove the pool before deleting this combined stack. GitHub setup and a portal status page are still separate from this AWS approval.
