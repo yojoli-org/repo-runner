@@ -78,6 +78,25 @@ if [[ $action == state ]]; then
   exit 0
 fi
 
+scale_up_concurrency=1
+if [[ $action == plan ]]; then
+  case ${PILOT_SCALE_UP_CONCURRENCY:-reserved} in
+    reserved)
+      quota=$(aws_pilot lambda get-account-settings --query AccountLimit.ConcurrentExecutions --output text)
+      if [[ ! $quota =~ ^[0-9]+$ ]]; then
+        echo 'Could not verify the regional Lambda concurrency quota.' >&2
+        exit 1
+      fi
+      if (( quota <= 10 )); then
+        echo 'This Lambda quota cannot support the pilot reservation. Request an increase or explicitly plan with PILOT_SCALE_UP_CONCURRENCY=shared.' >&2
+        exit 1
+      fi
+      ;;
+    shared) scale_up_concurrency=-1 ;;
+    *) echo 'PILOT_SCALE_UP_CONCURRENCY must be reserved or shared.' >&2; exit 2 ;;
+  esac
+fi
+
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 verify_state_bucket
 shasum -a 256 -c artifacts.sha256
@@ -99,8 +118,11 @@ case "$action" in
       echo 'Choose a new path for the saved plan.' >&2
       exit 1
     fi
-    plan_args=()
-    [[ $action != destroy-plan ]] || plan_args=(-destroy)
+    if [[ $action == destroy-plan ]]; then
+      plan_args=(-destroy)
+    else
+      plan_args=(-var="scale_up_reserved_concurrent_executions=$scale_up_concurrency")
+    fi
     terraform plan -input=false -out="$plan_file" \
       -var="aws_region=$PILOT_AWS_REGION" -var="sandbox_account_id=$PILOT_AWS_ACCOUNT" ${plan_args[@]+"${plan_args[@]}"}
     (set -o noclobber; plan_context > "$plan_file.context")

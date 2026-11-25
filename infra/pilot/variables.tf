@@ -47,3 +47,14 @@ variable "github_app_parameters" {
     webhook_secret_ssm = object({ arn = string, name = string })
   })
 }
+
+variable "scale_up_reserved_concurrent_executions" {
+  description = "Reserve one scale-up Lambda slot, or use shared concurrency for an isolated smoke test."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = contains([-1, 1], var.scale_up_reserved_concurrent_executions)
+    error_message = "Use 1 for a reserved slot or -1 for shared concurrency."
+  }
+}
