@@ -9,7 +9,7 @@ const failure = (statusCode, error) => ({ statusCode, headers: safeHeaders, body
 
 // Expose only through API Gateway with a JWT authorizer on both routes and
 // a resource policy limiting invocation to that gateway. Never log the event.
-export function createPortalLambda({ portalOrigin, sandbox, ...awsOptions }, connect = createAwsPortalHandlers) {
+export function createPortalLambda({ portalOrigin, sandbox, smokeRoutes, ...awsOptions }, connect = createAwsPortalHandlers) {
   const origin = new URL(portalOrigin).origin;
   const { issuer, subject, tenantId, installation } = sandbox;
   if (!origin.startsWith('https://') || ![issuer, subject, tenantId].every((value) => typeof value === 'string' && value)) {
@@ -17,14 +17,22 @@ export function createPortalLambda({ portalOrigin, sandbox, ...awsOptions }, con
   }
   const identity = { tenantId, userId: subject };
   let connected;
+  const routes = {
+    [startPath]: { method: 'POST', handler: 'start' },
+    [callbackPath]: { method: 'GET', handler: 'callback' },
+    ...(smokeRoutes && {
+      '/api/onboarding/smoke/start': { method: 'POST', handler: 'startSmoke' },
+      '/api/onboarding/smoke/status': { method: 'GET', handler: 'smokeStatus' },
+    }),
+  };
 
   return async (event) => {
     const method = event?.requestContext?.http?.method;
     const path = event?.rawPath;
-    if (event?.version !== '2.0' || (path !== startPath && path !== callbackPath)) {
+    if (event?.version !== '2.0' || !Object.hasOwn(routes, path)) {
       return failure(404, 'Route not found.');
     }
-    if (method !== (path === startPath ? 'POST' : 'GET')) return failure(405, 'Method not allowed.');
+    if (method !== routes[path].method) return failure(405, 'Method not allowed.');
     const claims = event.requestContext.authorizer?.jwt?.claims;
     if (claims?.iss !== issuer || claims?.sub !== subject) return failure(403, 'This sandbox is not approved for your account.');
 
@@ -43,7 +51,7 @@ export function createPortalLambda({ portalOrigin, sandbox, ...awsOptions }, con
       const headers = new Headers();
       if (event.headers?.origin) headers.set('origin', event.headers.origin);
       const request = new Request(url, { method, headers });
-      const response = await handlers[path === startPath ? 'start' : 'callback'](request);
+      const response = await handlers[routes[path].handler](request);
       return { statusCode: response.status, headers: Object.fromEntries(response.headers), body: await response.text() };
     } catch {
       return failure(503, 'Portal registration is temporarily unavailable.');

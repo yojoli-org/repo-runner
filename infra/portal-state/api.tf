@@ -79,10 +79,10 @@ locals {
       } }
     }),
   ] : [jsonencode({ Effect = "Allow", Action = "sts:AssumeRole", Resource = var.sandbox.installation.destination.roleArn })]
-  portal_routes = {
+  portal_routes = merge({
     "POST /api/onboarding/github/start"   = "POST/api/onboarding/github/start"
     "GET /api/onboarding/github/callback" = "GET/api/onboarding/github/callback"
-  }
+  }, local.smoke_routes)
 }
 
 resource "aws_cloudwatch_log_group" "portal_api" {
@@ -101,7 +101,7 @@ resource "aws_iam_role_policy" "portal_api" {
   role = aws_iam_role.portal_api.id
   policy = jsonencode({ Version = "2012-10-17", Statement = concat([
     { Effect = "Allow", Action = ["dynamodb:PutItem", "dynamodb:UpdateItem"], Resource = aws_dynamodb_table.registration_attempts.arn },
-    ], [for statement in local.registration_access : jsondecode(statement)], [
+    ], [for statement in local.registration_access : jsondecode(statement)], local.smoke_access, [
     { Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents"], Resource = "${aws_cloudwatch_log_group.portal_api.arn}:*" },
   ]) })
 }
@@ -126,6 +126,7 @@ resource "aws_lambda_function" "portal_api" {
         prefix   = var.sandbox.customer.prefix
         app      = var.sandbox.customer.app
         identity = { issuer = var.sandbox.issuer, subject = var.sandbox.subject, tenantId = var.sandbox.tenantId }
+        smoke    = local.smoke_enabled ? { project = aws_codebuild_project.smoke[0].name, sourceVersion = aws_codebuild_project.smoke[0].source_version } : null
       })
       } : {
       PORTAL_AWS_ACCOUNT_ID = var.portal_aws_account_id

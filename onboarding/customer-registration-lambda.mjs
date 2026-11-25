@@ -1,14 +1,25 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { PutParameterCommand, SSMClient } from '@aws-sdk/client-ssm';
 import { GetCallerIdentityCommand, STSClient } from '@aws-sdk/client-sts';
-import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { appParameterNames } from './parameter-store.mjs';
 import { createPortalLambda } from './portal-lambda.mjs';
 import { createPortalRegistrationHandlers } from './portal-registration.mjs';
+import { createSmokeJob } from './smoke-job.mjs';
+
+async function buildClient(region) {
+  const { CodeBuildClient, StartBuildCommand, BatchGetBuildsCommand } = await import('@aws-sdk/client-codebuild');
+  const client = new CodeBuildClient({ region });
+  return {
+    start: async (input) => (await client.send(new StartBuildCommand(input))).build?.id,
+    read: async (id) => (await client.send(new BatchGetBuildsCommand({ ids: [id] }))).builds?.[0],
+  };
+}
 
 export function createCustomerRegistrationLambda({ portalOrigin, accountId, region, tableName, sandbox, report },
   { sts = new STSClient({ region }), ssm = new SSMClient({ region }),
-    document = DynamoDBDocumentClient.from(new DynamoDBClient({ region })), request = fetch } = {}) {
+    document = DynamoDBDocumentClient.from(new DynamoDBClient({ region })), request = fetch,
+    connectBuild = buildClient } = {}) {
   const { identity, app, prefix } = sandbox;
   if (typeof accountId !== 'string' || !/^\d{12}$/.test(accountId)
     || typeof region !== 'string' || !/^[a-z]{2}(?:-[a-z]+)+-\d+$/.test(region)
@@ -29,8 +40,9 @@ export function createCustomerRegistrationLambda({ portalOrigin, accountId, regi
     allowSmokeDispatch: app.allowSmokeDispatch }, destination };
 
   return createPortalLambda({
-    portalOrigin, sandbox: { ...identity, installation },
-  }, async (options) => createPortalRegistrationHandlers({
+    portalOrigin, sandbox: { ...identity, installation }, smokeRoutes: Boolean(sandbox.smoke),
+  }, async (options) => ({
+    ...createPortalRegistrationHandlers({
     ...options, tableName, report, request, verifiedAwsStep: 'customer_account_verified',
     dynamodb: {
       put: (input) => document.send(new PutCommand(input)),
@@ -51,6 +63,31 @@ export function createCustomerRegistrationLambda({ portalOrigin, accountId, regi
         },
       };
     },
+    }),
+    ...(sandbox.smoke && createSmokeJob({
+      ...sandbox.smoke, origin: portalOrigin, prefix,
+      codebuild: await connectBuild(region),
+      store: {
+        read: async (id) => (await document.send(new GetCommand({
+          TableName: tableName, Key: { id }, ConsistentRead: true,
+        }))).Item,
+        async claim(item) {
+          try {
+            await document.send(new PutCommand({
+              TableName: tableName, Item: item, ConditionExpression: 'attribute_not_exists(id)',
+            }));
+            return true;
+          } catch (error) {
+            if (error.name === 'ConditionalCheckFailedException') return false;
+            throw error;
+          }
+        },
+        setBuild: (id, buildId) => document.send(new UpdateCommand({
+          TableName: tableName, Key: { id }, ConditionExpression: 'attribute_exists(id) AND attribute_not_exists(buildId)',
+          UpdateExpression: 'SET buildId = :build', ExpressionAttributeValues: { ':build': buildId },
+        })),
+      },
+    })),
   }));
 }
 

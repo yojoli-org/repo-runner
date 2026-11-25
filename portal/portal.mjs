@@ -8,10 +8,14 @@ const awsSetup = document.querySelector('#aws-setup');
 const deployAws = document.querySelector('#deploy-aws');
 let awsConfigured = false;
 let customerApiOrigin;
+let smokeEnabled = false;
+let smokePoll;
 const signIn = document.querySelector('#sign-in');
 const connect = document.querySelector('#connect');
+const verifyRunner = document.querySelector('#verify-runner');
 const clear = document.querySelector('#sign-out');
 const installer = document.querySelector('#customer-installer');
+const installApp = document.querySelector('#install-app');
 const keys = { login: 'rr-login', github: 'rr-github-state', session: 'rr-session' };
 const redirectUri = `${location.origin}${location.pathname}`;
 const returnedQuery = location.search;
@@ -28,7 +32,9 @@ function show(message, signedIn) {
   connect.hidden = !signedIn || (awsConfigured && !customerApiOrigin);
   awsSetup.hidden = !signedIn || !awsConfigured;
   clear.hidden = !signedIn;
+  verifyRunner.hidden = !signedIn || !smokeEnabled;
   installer.hidden = true;
+  installApp.hidden = true;
 }
 
 function activeSession() {
@@ -60,6 +66,43 @@ async function api(config, path, method, query) {
   return response.json();
 }
 
+async function smokeStatus(start = false) {
+  const auth = activeSession();
+  if (!auth) {
+    show('Sign in to check runner verification.', false);
+    return;
+  }
+  const endpoint = new URL('/api/onboarding/smoke/' + (start ? 'start' : 'status'), customerApiOrigin);
+  try {
+    const response = await fetch(endpoint, { method: start ? 'POST' : 'GET', redirect: 'error', cache: 'no-store',
+      headers: { Authorization: `Bearer ${auth.token}` } });
+    if (activeSession()?.token !== auth.token) return;
+    if (response.status === 401) {
+      sessionStorage.removeItem(keys.session);
+      show('Sign in to check runner verification.', false);
+      return;
+    }
+    const { state } = await response.json();
+    if (!response.ok && state !== 'unconfirmed') throw new Error();
+    if (state === 'idle') return;
+    const messages = {
+      starting: 'Starting runner verification…',
+      running: 'Verifying the smoke job and worker cleanup…',
+      ready: 'Runner ready. The ARM64 smoke job passed and the worker was cleaned up.',
+      failed: 'Runner verification failed. Ask the operator to check the smoke job.',
+      unconfirmed: 'Runner verification could not be confirmed. Ask the operator to check before retrying.',
+    };
+    if (!Object.hasOwn(messages, state)) throw new Error();
+    status.textContent = messages[state];
+    verifyRunner.hidden = true;
+    installApp.hidden = true;
+    connect.hidden = true;
+    if (state === 'starting' || state === 'running') smokePoll = setTimeout(() => smokeStatus(), 5000);
+  } catch {
+    status.textContent = 'Could not check runner verification. Reload to check the current status.';
+  }
+}
+
 async function start() {
   const response = await fetch('./config.json', { cache: 'no-store', redirect: 'error' });
   if (!response.ok) throw new Error('Sandbox configuration is unavailable.');
@@ -71,6 +114,7 @@ async function start() {
     deployAws.href = awsDeploymentLink(config.awsDeployment);
     if (config.awsDeployment.registrationApiOrigin !== undefined) {
       customerApiOrigin = customerRegistrationOrigin(config.awsDeployment.registrationApiOrigin, config.awsDeployment.region);
+      smokeEnabled = config.awsDeployment.smokeVerification === true;
       deployAws.hidden = true;
       document.querySelector('#aws-approval-note').hidden = true;
     }
@@ -85,8 +129,17 @@ async function start() {
     : 'Signed in. Continue to GitHub when you’re ready.';
 
   clear.onclick = () => {
+    clearTimeout(smokePoll);
     Object.values(keys).forEach((key) => sessionStorage.removeItem(key));
     show('Session cleared from this tab.', false);
+  };
+  verifyRunner.onclick = async () => {
+    verifyRunner.disabled = true;
+    try {
+      await smokeStatus(true);
+    } finally {
+      verifyRunner.disabled = false;
+    }
   };
   signIn.onclick = async () => {
     signIn.disabled = true;
@@ -124,6 +177,7 @@ async function start() {
 
   if (!returnedQuery) {
     show(activeSession() ? ready : 'Sign in to start setup.', Boolean(activeSession()));
+    if (smokeEnabled && activeSession()) await smokeStatus();
     return;
   }
 
@@ -139,6 +193,7 @@ async function start() {
       const auth = await exchangeSignIn(config, redirectUri, result.code, login.verifier);
       sessionStorage.setItem(keys.session, JSON.stringify(auth));
       show(ready, true);
+      if (smokeEnabled) await smokeStatus();
     } catch {
       show('Sign-in could not be completed. Please sign in again.', false);
     }
@@ -149,8 +204,13 @@ async function start() {
   status.textContent = 'Completing GitHub App registration…';
   try {
     const { slug } = await api(config, 'callback', 'GET', new URLSearchParams({ code: result.code, state: result.state }));
-    status.textContent = `App registered: ${slug}. Installation and webhook verification are separate steps.`;
+    if (typeof slug !== 'string' || !/^[a-z0-9-]+$/.test(slug)) throw new Error('Invalid App slug.');
+    status.textContent = `App registered: ${slug}. Install it on the approved repository` +
+      (smokeEnabled ? ', then select Verify runner.' : '.');
+    installApp.href = `https://github.com/apps/${slug}/installations/new`;
+    installApp.hidden = false;
     clear.hidden = false;
+    verifyRunner.hidden = !smokeEnabled;
   } catch {
     show('GitHub setup did not complete. Check whether the App was created before trying again.', Boolean(activeSession()));
     connect.hidden = true;
