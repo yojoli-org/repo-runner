@@ -1,12 +1,13 @@
 import { authorizationRequest, exchangeSignIn, githubForm, httpsOrigin, readReturn } from './oauth.mjs';
 
-import { awsDeploymentLink } from './aws-deployment.mjs';
+import { awsDeploymentLink, customerRegistrationOrigin } from './aws-deployment.mjs';
 
 const status = document.querySelector('#status');
 const intro = document.querySelector('#intro');
 const awsSetup = document.querySelector('#aws-setup');
 const deployAws = document.querySelector('#deploy-aws');
 let awsConfigured = false;
+let customerApiOrigin;
 const signIn = document.querySelector('#sign-in');
 const connect = document.querySelector('#connect');
 const clear = document.querySelector('#sign-out');
@@ -24,7 +25,7 @@ function get(key) {
 function show(message, signedIn) {
   status.textContent = message;
   signIn.hidden = signedIn;
-  connect.hidden = !signedIn || awsConfigured;
+  connect.hidden = !signedIn || (awsConfigured && !customerApiOrigin);
   awsSetup.hidden = !signedIn || !awsConfigured;
   clear.hidden = !signedIn;
   installer.hidden = true;
@@ -40,7 +41,7 @@ function activeSession() {
 async function api(config, path, method, query) {
   const auth = activeSession();
   if (!auth) throw new Error('Your sandbox session expired. Please sign in again.');
-  const url = new URL(`/api/onboarding/github/${path}`, httpsOrigin(config.apiOrigin));
+  const url = new URL(`/api/onboarding/github/${path}`, customerApiOrigin ?? httpsOrigin(config.apiOrigin));
   if (query) url.search = query;
   const response = await fetch(url, { method, redirect: 'error', cache: 'no-store',
     headers: { Authorization: `Bearer ${auth.token}` } });
@@ -68,13 +69,19 @@ async function start() {
   if (!config.clientId || !config.scope) throw new Error('Sandbox sign-in is not configured.');
   if (config.awsDeployment !== undefined) {
     deployAws.href = awsDeploymentLink(config.awsDeployment);
+    if (config.awsDeployment.registrationApiOrigin !== undefined) {
+      customerApiOrigin = customerRegistrationOrigin(config.awsDeployment.registrationApiOrigin, config.awsDeployment.region);
+      deployAws.hidden = true;
+      document.querySelector('#aws-approval-note').hidden = true;
+    }
     for (const [id, key] of [['aws-account', 'account'], ['aws-region', 'region'], ['aws-repository', 'repository']]) {
       document.querySelector('#' + id).textContent = config.awsDeployment[key];
     }
     awsConfigured = true;
     intro.textContent = 'Deploy an on-demand GitHub Actions runner pool in your AWS account.';
   }
-  const ready = awsConfigured ? 'Signed in. Review the destination, then approve deployment in AWS.'
+  const ready = customerApiOrigin ? 'AWS deployment is ready. Continue to GitHub to connect your repository.'
+    : awsConfigured ? 'Signed in. Review the destination, then approve deployment in AWS.'
     : 'Signed in. Continue to GitHub when you’re ready.';
 
   clear.onclick = () => {

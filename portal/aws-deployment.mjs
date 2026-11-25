@@ -13,3 +13,13 @@ export function awsDeploymentLink({ account, region, bucket, templateKey, stackN
   consoleUrl.hash = '/stacks/create/review?' + setup;
   return consoleUrl.href;
 }
+
+export function customerRegistrationOrigin(value, region) {
+  const url = new URL(value);
+  const api = url.hostname.split('.')[0];
+  const origin = `https://${api}.execute-api.${region}.amazonaws.com`;
+  if (!/^[a-z0-9]+$/.test(api) || url.href !== origin + '/') {
+    throw new Error('The customer registration endpoint is invalid.');
+  }
+  return origin;
+}

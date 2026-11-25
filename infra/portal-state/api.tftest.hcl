@@ -1,4 +1,11 @@
-mock_provider "aws" {}
+mock_provider "aws" {
+  mock_resource "aws_iam_role" {
+    defaults = { arn = "arn:aws:iam::111111111111:role/fixture" }
+  }
+  mock_resource "aws_apigatewayv2_api" {
+    defaults = { execution_arn = "arn:aws:execute-api:us-east-2:111111111111:fixture" }
+  }
+}
 
 variables {
   portal_aws_account_id = "111111111111"
@@ -39,5 +46,56 @@ run "protect_both_registration_routes" {
       && contains(route.authorization_scopes, "registration/start")
     ])
     error_message = "Both routes must require a JWT and the intended OAuth scope."
+  }
+}
+
+run "customer_endpoint_writes_only_local_installation_parameters" {
+  command = apply
+
+  variables {
+    table_name = "example-customer-attempts"
+    sandbox = {
+      issuer   = "https://id.example.test"
+      audience = "portal"
+      scope    = "registration/start"
+      tenantId = "example"
+      subject  = "example-user"
+      customer = {
+        prefix = "example-customer"
+        app = {
+          organization = "example-org"
+          appName      = "Example Repo Runner"
+          homepage     = "https://portal.example.test"
+          redirectUrl  = "https://portal.example.test/"
+          webhookUrl   = "https://fixture.execute-api.us-east-2.amazonaws.com/webhook"
+        }
+      }
+    }
+  }
+
+  assert {
+    condition = aws_lambda_function.portal_api.handler == "onboarding/customer-registration-lambda.handler" && alltrue([
+      for route in aws_apigatewayv2_route.portal : route.authorization_type == "JWT" &&
+      contains(route.authorization_scopes, "registration/start")
+    ])
+    error_message = "The customer handler must be protected by the JWT authorizer on both routes."
+  }
+
+  assert {
+    condition = !contains(flatten([
+      for permission in jsondecode(nonsensitive(aws_iam_role_policy.portal_api.policy)).Statement : permission.Action
+    ]), "sts:AssumeRole")
+    error_message = "The customer role must not be able to assume another role."
+  }
+
+  assert {
+    condition = one([
+      for permission in jsondecode(nonsensitive(aws_iam_role_policy.portal_api.policy)).Statement : sort(permission.Resource)
+      if permission.Action == "ssm:PutParameter"
+      ]) == sort([
+      for name in ["app-id", "app-key-base64", "webhook-secret"] :
+      "arn:aws:ssm:us-east-2:111111111111:parameter/repo-runner/example-customer/${name}"
+    ])
+    error_message = "Parameter writes must target exactly the three local customer paths."
   }
 }

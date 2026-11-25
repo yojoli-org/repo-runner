@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { awsDeploymentLink } from '../portal/aws-deployment.mjs';
+import { awsDeploymentLink, customerRegistrationOrigin } from '../portal/aws-deployment.mjs';
 
 const deployment = {
   account: '123456789012', region: 'us-east-2', bucket: 'example-private-bucket',
@@ -28,4 +28,12 @@ test('rejects untrusted URL fragments and invalid sandbox identifiers', () => {
     { templateKey: 'browser-bootstrap/x/combined.json?token=fixture' }, { stackName: 'rr-foo#extra' },
     { bucket: 'example.com' }, { account: 'fixture' }, { repository: 'https://example.test/repo' },
   ]) assert.throws(() => awsDeploymentLink({ ...deployment, ...fields }), /invalid/);
+});
+
+test('uses only a regional HTTPS API origin for the customer registration token', () => {
+  const value = 'https://fixture.execute-api.us-east-2.amazonaws.com';
+  assert.equal(customerRegistrationOrigin(value, 'us-east-2'), value);
+  for (const bad of [value + '/extra', value + '?x=1', value.replace('us-east-2','us-west-2'), 'https://example.test']) {
+    assert.throws(() => customerRegistrationOrigin(bad, 'us-east-2'), /invalid/);
+  }
 });

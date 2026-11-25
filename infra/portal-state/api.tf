@@ -22,20 +22,56 @@ variable "sandbox" {
     scope    = string
     subject  = string
     tenantId = string
-    installation = object({
+    installation = optional(object({
       config      = object({ organization = string, appName = string, homepage = string, redirectUrl = string })
       destination = object({ accountId = string, region = string, path = string, roleArn = string, externalId = string })
-    })
+    }))
+    customer = optional(object({
+      prefix = string
+      app    = object({ organization = string, appName = string, homepage = string, redirectUrl = string, webhookUrl = string })
+    }))
   })
 
   validation {
     condition     = startswith(var.sandbox.issuer, "https://") && alltrue([for value in [var.sandbox.scope, var.sandbox.audience, var.sandbox.subject, var.sandbox.tenantId] : trimspace(value) != ""])
     error_message = "Provide an HTTPS issuer and an explicit audience, access-token scope, subject, and tenant."
   }
+
+  validation {
+    condition     = (var.sandbox.installation == null) != (var.sandbox.customer == null)
+    error_message = "Configure exactly one registration destination."
+  }
+
+  validation {
+    condition = var.sandbox.customer == null ? true : (
+      can(regex("^[a-z0-9][a-z0-9-]{1,23}$", var.sandbox.customer.prefix)) &&
+      startswith(var.table_name, "${var.sandbox.customer.prefix}-") &&
+      can(regex("^https://[a-z0-9]+[.]execute-api[.]${var.portal_aws_region}[.]amazonaws[.]com/webhook$", var.sandbox.customer.app.webhookUrl))
+    )
+    error_message = "Use the runner prefix and its deployed HTTPS webhook in the configured AWS region."
+  }
 }
 
 locals {
-  portal_function_name = "${var.table_name}-api"
+  customer_registration = var.sandbox.customer != null
+  portal_function_name  = "${var.table_name}-api"
+  customer_parameter_arns = local.customer_registration ? [
+    for suffix in ["app-key-base64", "webhook-secret", "app-id"] :
+    "arn:aws:ssm:${var.portal_aws_region}:${var.portal_aws_account_id}:parameter/repo-runner/${var.sandbox.customer.prefix}/${suffix}"
+  ] : []
+  registration_access = local.customer_registration ? [
+    jsonencode({ Effect = "Allow", Action = "ssm:PutParameter", Resource = local.customer_parameter_arns }),
+    jsonencode({
+      Effect   = "Allow"
+      Action   = "kms:Encrypt"
+      Resource = "arn:aws:kms:${var.portal_aws_region}:${var.portal_aws_account_id}:key/*"
+      Condition = { StringEquals = {
+        "kms:ViaService"                      = "ssm.${var.portal_aws_region}.amazonaws.com"
+        "kms:ResourceAliases"                 = "alias/aws/ssm"
+        "kms:EncryptionContext:PARAMETER_ARN" = slice(local.customer_parameter_arns, 0, 2)
+      } }
+    }),
+  ] : [jsonencode({ Effect = "Allow", Action = "sts:AssumeRole", Resource = var.sandbox.installation.destination.roleArn })]
   portal_routes = {
     "POST /api/onboarding/github/start"   = "POST/api/onboarding/github/start"
     "GET /api/onboarding/github/callback" = "GET/api/onboarding/github/callback"
@@ -56,17 +92,17 @@ resource "aws_iam_role" "portal_api" {
 
 resource "aws_iam_role_policy" "portal_api" {
   role = aws_iam_role.portal_api.id
-  policy = jsonencode({ Version = "2012-10-17", Statement = [
+  policy = jsonencode({ Version = "2012-10-17", Statement = concat([
     { Effect = "Allow", Action = ["dynamodb:PutItem", "dynamodb:UpdateItem"], Resource = aws_dynamodb_table.registration_attempts.arn },
-    { Effect = "Allow", Action = "sts:AssumeRole", Resource = var.sandbox.installation.destination.roleArn },
+    ], [for statement in local.registration_access : jsondecode(statement)], [
     { Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents"], Resource = "${aws_cloudwatch_log_group.portal_api.arn}:*" },
-  ] })
+  ]) })
 }
 
 resource "aws_lambda_function" "portal_api" {
   function_name    = local.portal_function_name
   role             = aws_iam_role.portal_api.arn
-  handler          = "onboarding/portal-lambda.handler"
+  handler          = local.customer_registration ? "onboarding/customer-registration-lambda.handler" : "onboarding/portal-lambda.handler"
   runtime          = "nodejs22.x"
   filename         = var.lambda_zip
   source_code_hash = filebase64sha256(var.lambda_zip)
@@ -74,12 +110,23 @@ resource "aws_lambda_function" "portal_api" {
   memory_size      = 256
 
   environment {
-    variables = {
-      PORTAL_ORIGIN                = var.portal_origin
-      PORTAL_AWS_ACCOUNT_ID        = var.portal_aws_account_id
-      REGISTRATION_ATTEMPT_TABLE   = aws_dynamodb_table.registration_attempts.name
-      PORTAL_SANDBOX_CONFIGURATION = jsonencode(var.sandbox)
-    }
+    variables = merge({
+      PORTAL_ORIGIN              = var.portal_origin
+      REGISTRATION_ATTEMPT_TABLE = aws_dynamodb_table.registration_attempts.name
+      }, local.customer_registration ? {
+      CUSTOMER_AWS_ACCOUNT_ID = var.portal_aws_account_id
+      CUSTOMER_REGISTRATION_CONFIGURATION = jsonencode({
+        prefix   = var.sandbox.customer.prefix
+        app      = var.sandbox.customer.app
+        identity = { issuer = var.sandbox.issuer, subject = var.sandbox.subject, tenantId = var.sandbox.tenantId }
+      })
+      } : {
+      PORTAL_AWS_ACCOUNT_ID = var.portal_aws_account_id
+      PORTAL_SANDBOX_CONFIGURATION = jsonencode({
+        issuer  = var.sandbox.issuer, audience = var.sandbox.audience, scope = var.sandbox.scope,
+        subject = var.sandbox.subject, tenantId = var.sandbox.tenantId, installation = var.sandbox.installation,
+      })
+    })
   }
 
   depends_on = [aws_iam_role_policy.portal_api]
