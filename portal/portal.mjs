@@ -4,6 +4,7 @@ const status = document.querySelector('#status');
 const signIn = document.querySelector('#sign-in');
 const connect = document.querySelector('#connect');
 const clear = document.querySelector('#sign-out');
+const installer = document.querySelector('#customer-installer');
 const keys = { login: 'rr-login', github: 'rr-github-state', session: 'rr-session' };
 const redirectUri = `${location.origin}${location.pathname}`;
 const returnedQuery = location.search;
@@ -19,6 +20,7 @@ function show(message, signedIn) {
   signIn.hidden = signedIn;
   connect.hidden = !signedIn;
   clear.hidden = !signedIn;
+  installer.hidden = true;
 }
 
 function activeSession() {
@@ -36,6 +38,14 @@ async function api(config, path, method, query) {
   const response = await fetch(url, { method, redirect: 'error', cache: 'no-store',
     headers: { Authorization: `Bearer ${auth.token}` } });
   if (response.status === 401) sessionStorage.removeItem(keys.session);
+  if (path === 'start' && response.status === 403) {
+    const problem = await response.json().catch(() => null);
+    if (problem?.code === 'customer_aws_access_denied') {
+      throw Object.assign(new Error('Your AWS account denied access from the portal. Use the installer with your own AWS session.'), {
+        code: problem.code,
+      });
+    }
+  }
   if (!response.ok) throw new Error(path === 'callback'
     ? 'GitHub setup did not complete. Check whether the App was created before trying again.'
     : 'Could not start GitHub setup. Check your sandbox access and try again.');
@@ -79,8 +89,10 @@ async function start() {
       form.append(input);
       document.body.append(form);
       form.submit();
-    } catch {
-      show('Could not start GitHub setup. Check your sandbox access and try again.', Boolean(activeSession()));
+    } catch (error) {
+      const blocked = error?.code === 'customer_aws_access_denied';
+      show(blocked ? error.message : 'Could not start GitHub setup. Check your sandbox access and try again.', Boolean(activeSession()));
+      installer.hidden = !blocked;
     } finally {
       connect.disabled = false;
     }
