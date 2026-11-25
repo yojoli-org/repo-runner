@@ -60,3 +60,27 @@ node infra/browser-bootstrap/deployment-iam.mjs \
 ```
 
 These documents target the pinned sandbox module. The runtime boundary allows EC2 launch actions within the selected region because launch authorization spans several resource types. Use it only in an isolated sandbox until launch scoping is reviewed and a native ARM64 smoke test passes. The runtime roles still need their own identity policies. The deployment IAM fragment deliberately covers only IAM. The CodeBuild role also needs a reviewed policy for the state key, source ZIP, logs, discovery, and non-IAM Terraform resources. Do not attach either document before review and approval.
+
+For the isolated rehearsal, generate the companion IAM stack from a reviewed settings file:
+
+```json
+{
+  "account": "123456789012",
+  "region": "us-east-2",
+  "prefix": "rr-browser-test",
+  "project": "rr-browser-test-deploy",
+  "roleName": "rr-bootstrap-browser-test",
+  "boundaryName": "rr-runtime-browser-test",
+  "sourceBucket": "example-private-bucket",
+  "sourceKey": "browser-bootstrap/fixture/deploy.zip",
+  "sourceVersion": "replace-with-exact-s3-version",
+  "stateBucket": "example-private-bucket",
+  "vpc": "vpc-0123456789abcdef0"
+}
+```
+
+```bash
+node infra/browser-bootstrap/make-deployment-role-template.mjs /private/path/role-settings.json > /private/path/role-template.json
+```
+
+The IAM template creates the role and boundary only in the named account and region. The role trusts the exact CodeBuild project. Install it with explicit IAM approval before using its outputs in the deployment variant. The stack name for the deployment variant must equal `project`. The role policy allows selected API Gateway create and read calls across the region because AWS assigns API identifiers as resources are created. Use a dedicated test account until that scope has been reviewed for production. Teardown authorization stays with the sandbox administrator.
