@@ -1,0 +1,142 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Repo Runner browser bootstrap proof. Starts a single CodeBuild job to verify the customer account and regional Lambda quota.",
+  "Parameters": {
+    "ExpectedAccountId": {
+      "Type": "String",
+      "AllowedPattern": "[0-9]{12}",
+      "Description": "The AWS test account authorized for this rehearsal."
+    }
+  },
+  "Resources": {
+    "BuildLog": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": { "Fn::Sub": "/repo-runner/bootstrap/${AWS::StackName}" },
+        "RetentionInDays": 7
+      }
+    },
+    "BuildRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{ "Effect": "Allow", "Principal": { "Service": "codebuild.amazonaws.com" }, "Action": "sts:AssumeRole",
+            "Condition": { "StringEquals": {
+              "aws:SourceAccount": { "Ref": "AWS::AccountId" },
+              "aws:SourceArn": { "Fn::Sub": "arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:project/${AWS::StackName}" }
+            } }
+          }]
+        },
+        "Policies": [{
+          "PolicyName": "VerifyLocalAccount",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              { "Effect": "Allow", "Action": ["logs:CreateLogStream", "logs:PutLogEvents"], "Resource": { "Fn::GetAtt": ["BuildLog", "Arn"] } },
+              { "Effect": "Allow", "Action": "lambda:GetAccountSettings", "Resource": "*" }
+            ]
+          }
+        }]
+      }
+    },
+    "Build": {
+      "Type": "AWS::CodeBuild::Project",
+      "Properties": {
+        "Name": { "Ref": "AWS::StackName" },
+        "ServiceRole": { "Fn::GetAtt": ["BuildRole", "Arn"] },
+        "Artifacts": { "Type": "NO_ARTIFACTS" },
+        "Source": {
+          "Type": "NO_SOURCE",
+          "BuildSpec": "version: 0.2\nphases:\n  build:\n    commands:\n      - 'test \"$(aws sts get-caller-identity --query Account --output text)\" = \"$EXPECTED_ACCOUNT_ID\"'\n      - 'aws lambda get-account-settings --query AccountLimit.ConcurrentExecutions --output text'\n      - 'echo Browser bootstrap proof passed'\n"
+        },
+        "Environment": {
+          "Type": "LINUX_CONTAINER",
+          "ComputeType": "BUILD_GENERAL1_SMALL",
+          "Image": "aws/codebuild/amazonlinux-x86_64-standard:5.0",
+          "PrivilegedMode": false,
+          "EnvironmentVariables": [{ "Name": "EXPECTED_ACCOUNT_ID", "Value": { "Ref": "ExpectedAccountId" } }]
+        },
+        "LogsConfig": {
+          "CloudWatchLogs": { "Status": "ENABLED", "GroupName": { "Ref": "BuildLog" }, "StreamName": "proof" }
+        },
+        "ConcurrentBuildLimit": 1,
+        "TimeoutInMinutes": 5,
+        "QueuedTimeoutInMinutes": 5
+      }
+    },
+    "LauncherRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{ "Effect": "Allow", "Principal": { "Service": "lambda.amazonaws.com" }, "Action": "sts:AssumeRole" }]
+        },
+        "Policies": [{
+          "PolicyName": "LaunchProof",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [{ "Effect": "Allow", "Action": "codebuild:StartBuild", "Resource": { "Fn::GetAtt": ["Build", "Arn"] } }]
+          }
+        }]
+      }
+    },
+    "Launcher": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Runtime": "nodejs22.x",
+        "Handler": "index.handler",
+        "Role": { "Fn::GetAtt": ["LauncherRole", "Arn"] },
+        "Timeout": 45,
+        "Environment": {
+          "Variables": {
+            "PROJECT": { "Ref": "Build" },
+            "ACCOUNT_ID": { "Ref": "AWS::AccountId" },
+            "EXPECTED_ACCOUNT_ID": { "Ref": "ExpectedAccountId" }
+          }
+        },
+        "Code": {
+          "ZipFile": {
+            "Fn::Join": ["\n", [
+              "const cfn = require('cfn-response');",
+              "const { CodeBuildClient, StartBuildCommand } = require('@aws-sdk/client-codebuild');",
+              "exports.handler = async (event, context) => {",
+              "  const physicalId = event.PhysicalResourceId || process.env.PROJECT;",
+              "  if (event.RequestType === 'Delete') {",
+              "    await cfn.send(event, context, cfn.SUCCESS, {}, physicalId);",
+              "    return;",
+              "  }",
+              "  try {",
+              "    if (process.env.ACCOUNT_ID !== process.env.EXPECTED_ACCOUNT_ID) throw new Error();",
+              "    if (event.RequestType !== 'Create') throw new Error();",
+              "    const client = new CodeBuildClient({});",
+              "    const result = await client.send(new StartBuildCommand({",
+              "      projectName: process.env.PROJECT, idempotencyToken: event.RequestId,",
+              "    }), { abortSignal: AbortSignal.timeout(25000) });",
+              "    if (!result.build?.id) throw new Error();",
+              "    await cfn.send(event, context, cfn.SUCCESS, { BuildId: result.build.id }, physicalId);",
+              "  } catch {",
+              "    await cfn.send(event, context, cfn.FAILED, { Error: 'Could not start the customer-account proof build.' }, physicalId);",
+              "  }",
+              "};"
+            ]]
+          }
+        }
+      }
+    },
+    "LaunchProof": {
+      "Type": "Custom::RepoRunnerBrowserBootstrap",
+      "Properties": {
+        "ServiceToken": { "Fn::GetAtt": ["Launcher", "Arn"] },
+        "ServiceTimeout": "60",
+        "ExpectedAccountId": { "Ref": "ExpectedAccountId" }
+      }
+    }
+  },
+  "Outputs": {
+    "BuildId": {
+      "Description": "Check this CodeBuild execution separately. Stack creation confirms dispatch only.",
+      "Value": { "Fn::GetAtt": ["LaunchProof", "BuildId"] }
+    }
+  }
+}
