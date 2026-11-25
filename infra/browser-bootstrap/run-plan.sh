@@ -49,7 +49,27 @@ curl -fsS --retry 2 --max-time 90 "https://releases.hashicorp.com/terraform/$ver
 unzip -q "$work/$archive" terraform -d "$work"
 sha256sum -c artifacts.sha256
 tf="$work/terraform"
-"$tf" init -input=false -lockfile=readonly -no-color
+backend=()
+if [[ ${RR_DEPLOY:-0} == 1 ]]; then
+  bucket_query() {
+    aws s3api "$1" --bucket "$PILOT_STATE_BUCKET" --expected-bucket-owner "$EXPECTED_ACCOUNT_ID" --query "$2" --output text
+  }
+  location=$(bucket_query get-bucket-location LocationConstraint)
+  [[ "$location" != None ]] || location=us-east-1
+  [[ "$location" == "$AWS_REGION" ]]
+  [[ $(bucket_query get-bucket-versioning Status) == Enabled ]]
+  block='PublicAccessBlockConfiguration.BlockPublicAcls && PublicAccessBlockConfiguration.IgnorePublicAcls && PublicAccessBlockConfiguration.BlockPublicPolicy && PublicAccessBlockConfiguration.RestrictPublicBuckets'
+  [[ $(bucket_query get-public-access-block "$block") == True ]]
+  encryption=$(bucket_query get-bucket-encryption 'ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm')
+  [[ -n "$encryption" && "$encryption" != None ]]
+  backend=(
+    "-backend-config=bucket=$PILOT_STATE_BUCKET"
+    "-backend-config=key=browser-deploy/$PILOT_PREFIX/pilot.tfstate"
+    "-backend-config=region=$AWS_REGION"
+    "-backend-config=allowed_account_ids=[\"$EXPECTED_ACCOUNT_ID\"]"
+  )
+fi
+"$tf" init -input=false -lockfile=readonly -no-color "${backend[@]}"
 if ! "$tf" plan -input=false -out="$work/preview.tfplan" -no-color > "$work/plan.log" 2>&1; then
   awk '/^Error:/ {print}' "$work/plan.log" >&2
   exit 1
@@ -63,3 +83,7 @@ if not changes or any(r["change"]["actions"] != ["create"] or r["type"] == "aws_
 print(json.dumps({"result":"preview_ready", "create_count":len(changes), "region":os.environ["AWS_REGION"],
                   "scale_up_reserved_slots":int(os.environ["RR_SCALE_UP_SLOTS"])}))
 '
+if [[ ${RR_DEPLOY:-0} == 1 ]]; then
+  "$tf" apply -input=false -no-color "$work/preview.tfplan"
+  printf '%s\n' 'Runner pool deployed. GitHub setup and smoke verification are pending.'
+fi
