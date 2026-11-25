@@ -19,6 +19,15 @@ export function createPortalRegistrationHandlers({ portalOrigin, authenticate, a
     return { tenantId: identity.tenantId, userId: identity.userId };
   }
 
+  async function verifiedCustomerAws(destination) {
+    const aws = await customerAws(destination);
+    const caller = await aws.getCallerIdentity();
+    if (!/^\d{12}$/.test(destination.accountId) || caller.Account !== destination.accountId) {
+      throw new Error('AWS account does not match the approved installation.');
+    }
+    return aws;
+  }
+
   return {
     async start(httpRequest) {
       if (httpRequest.method !== 'POST') return json({ error: 'Use POST.' }, 405);
@@ -30,6 +39,14 @@ export function createPortalRegistrationHandlers({ portalOrigin, authenticate, a
         if (!installation) return json({ error: 'Approve an installation first.' }, 403);
         if (new URL(installation.config.redirectUrl).origin !== origin) {
           throw new Error('Invalid portal callback origin.');
+        }
+        try {
+          await verifiedCustomerAws(installation.destination);
+        } catch (error) {
+          if (error?.name !== 'AccessDenied' && error?.name !== 'AccessDeniedException') throw error;
+          report('customer_role_preflight_denied');
+          return json({ code: 'customer_aws_access_denied',
+            error: 'The portal could not access the customer AWS account. Use customer-side setup.' }, 403);
         }
         return json(await startAppRegistration({
           identity, config: installation.config, destination: installation.destination, store,
@@ -47,12 +64,8 @@ export function createPortalRegistrationHandlers({ portalOrigin, authenticate, a
         const result = await finishAppRegistration({
           identity, query: new URL(httpRequest.url).searchParams, store, request, report,
           saveCredentials: async ({ destination }, credentials) => {
-            const aws = await customerAws(destination);
+            const aws = await verifiedCustomerAws(destination);
             report('customer_role_assumed');
-            const caller = await aws.getCallerIdentity();
-            if (!/^\d{12}$/.test(destination.accountId) || caller.Account !== destination.accountId) {
-              throw new Error('AWS account does not match the approved installation.');
-            }
             await saveAppParameters((input) => aws.putParameter(input), destination.path, credentials);
           },
         });

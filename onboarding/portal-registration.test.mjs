@@ -6,8 +6,9 @@ const portalOrigin = 'https://portal.example.test';
 const destination = { accountId: '111111111111', region: 'us-east-2', path: '/repo-runner/example' };
 const startRequest = (origin = portalOrigin) => new Request(`${portalOrigin}/start`, { method: 'POST', headers: { origin } });
 
-function fixture({ signedIn = true, account = destination.accountId } = {}) {
+function fixture({ signedIn = true, account = destination.accountId, failure } = {}) {
   let item;
+  let checks = 0;
   const writes = [];
   const handlers = createPortalRegistrationHandlers({
     portalOrigin, tableName: 'portal-table',
@@ -29,10 +30,13 @@ function fixture({ signedIn = true, account = destination.accountId } = {}) {
       owner: { login: 'example-org' }, pem: '-----BEGIN RSA PRIVATE KEY-----\nfixture', webhook_secret: 'fixture' }) }),
     customerAws: async (approved) => {
       assert.deepEqual(approved, destination);
-      return { getCallerIdentity: async () => ({ Account: account }), putParameter: async (input) => writes.push(input) };
+      checks++;
+      if (failure) throw Object.assign(new Error('internal AWS detail'), { name: failure });
+      return { getCallerIdentity: async () => ({ Account: typeof account === 'function' ? account(checks) : account }),
+        putParameter: async (input) => writes.push(input) };
     },
   });
-  return { handlers, writes };
+  return { handlers, writes, hasAttempt: () => Boolean(item) };
 }
 
 async function callbackRequest(handlers) {
@@ -65,7 +69,29 @@ test('rejects cross-origin starts and unauthenticated requests', async () => {
 });
 
 test('a misdirected AWS client cannot write credentials', async () => {
-  const { handlers, writes } = fixture({ account: '222222222222' });
+  const { handlers, writes } = fixture({ account: (checks) => checks === 1 ? destination.accountId : '222222222222' });
   assert.equal((await handlers.callback(await callbackRequest(handlers))).status, 409);
   assert.deepEqual(writes, []);
+});
+
+test('denied AWS access offers the installer before creating a GitHub attempt', async () => {
+  const { handlers, hasAttempt, writes } = fixture({ failure: 'AccessDenied' });
+  const response = await handlers.start(startRequest());
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), {
+    code: 'customer_aws_access_denied',
+    error: 'The portal could not access the customer AWS account. Use customer-side setup.',
+  });
+  assert.equal(hasAttempt(), false);
+  assert.deepEqual(writes, []);
+});
+
+test('wrong AWS account and transient STS failures stop before creating an attempt', async () => {
+  for (const options of [{ account: '222222222222' }, { failure: 'ThrottlingException' }]) {
+    const { handlers, hasAttempt } = fixture(options);
+    const response = await handlers.start(startRequest());
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), { error: 'Could not start GitHub App registration.' });
+    assert.equal(hasAttempt(), false);
+  }
 });
