@@ -10,7 +10,8 @@ function httpsUrl(value) {
 
 // Call on the server. Persist state against the authenticated installation
 // attempt before returning the form fields to the browser.
-export function createRegistration({ organization, appName, homepage, redirectUrl, localCallback = false, webhookUrl }) {
+export function createRegistration({ organization, appName, homepage, redirectUrl, localCallback = false,
+  webhookUrl, allowSmokeDispatch = false }) {
   if (!/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(organization ?? '')) {
     throw new Error('Provide a GitHub organization login.');
   }
@@ -44,7 +45,8 @@ export function createRegistration({ organization, appName, homepage, redirectUr
         public: false,
         hook_attributes: hook,
         default_events: ['workflow_job'],
-        default_permissions: { actions: 'read', checks: 'read', metadata: 'read', administration: 'write' },
+        default_permissions: { actions: allowSmokeDispatch === true ? 'write' : 'read',
+          checks: 'read', metadata: 'read', administration: 'write' },
       }),
     },
   };

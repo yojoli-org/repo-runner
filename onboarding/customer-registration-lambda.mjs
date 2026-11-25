@@ -25,7 +25,8 @@ export function createCustomerRegistrationLambda({ portalOrigin, accountId, regi
   const destination = { accountId, region, path: '/repo-runner/' + prefix };
   const names = appParameterNames(destination.path);
   const installation = { config: { organization: app.organization, appName: app.appName,
-    homepage: app.homepage, redirectUrl: app.redirectUrl, webhookUrl: webhook.href }, destination };
+    homepage: app.homepage, redirectUrl: app.redirectUrl, webhookUrl: webhook.href,
+    allowSmokeDispatch: app.allowSmokeDispatch }, destination };
 
   return createPortalLambda({
     portalOrigin, sandbox: { ...identity, installation },
