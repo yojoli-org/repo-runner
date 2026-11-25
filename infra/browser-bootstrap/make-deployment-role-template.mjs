@@ -91,6 +91,7 @@ const deploy = { Version: '2012-10-17', Statement: [
     'sqs:ListQueueTags', 'sqs:TagQueue'], arn('sqs', prefix + '-queued-builds')),
   allow(['ssm:PutParameter', 'ssm:GetParameter', 'ssm:ListTagsForResource', 'ssm:AddTagsToResource'],
     arn('ssm', `parameter/github-action-runners/${prefix}/*`)),
+  allow('ssm:GetParameters', arn('ssm', `parameter/github-action-runners/${prefix}/runners/config/ami_id`)),
   allow('apigateway:POST', gateway, requestTag),
   // API Gateway checks the encoded tag resource when creating a tagged HTTP API.
   allow('apigateway:POST', apiTagPrefix + '*'),

@@ -82,6 +82,18 @@ if [[ ${RR_DEPLOY:-0} == 1 ]]; then
   )
 fi
 "$tf" init -input=false -lockfile=readonly -no-color "${backend[@]}"
+if [[ ${RR_DEPLOY:-0} == 1 ]]; then
+  # The pinned module tags this stage at creation, which API Gateway gates
+  # behind an action the policy validator rejects. The parent API stays tagged.
+  webhook_module=.terraform/modules/pilot/modules/webhook
+  grep -Fx 'resource "aws_apigatewayv2_stage" "webhook" {' "$webhook_module/main.tf" > /dev/null
+  (set -o noclobber; cat > "$webhook_module/repo_runner_stage_override.tf" <<'EOF'
+resource "aws_apigatewayv2_stage" "webhook" {
+  tags = {}
+}
+EOF
+  )
+fi
 if ! "$tf" plan -input=false -out="$work/preview.tfplan" -no-color > "$work/plan.log" 2>&1; then
   awk '/^Error:/ {print}' "$work/plan.log" >&2
   exit 1
@@ -100,9 +112,9 @@ if not changes or any(r["change"]["actions"] != ["create"] or r["type"] == "aws_
 if os.environ.get("RR_DEPLOY") == "1":
     boundary = os.environ["PILOT_RUNTIME_BOUNDARY"]
     path = "/" + os.environ["PILOT_PREFIX"] + "/"
-    roles = [r["change"]["after"] for r in changes if r["type"] == "aws_iam_role"]
+    roles = [r["change"]["after"] for r in plan["resource_changes"] if r["type"] == "aws_iam_role"]
     if not roles or any(role.get("permissions_boundary") != boundary or role.get("path") != path for role in roles):
-        raise SystemExit("Every new role must have the approved permissions boundary and pilot path.")
+        raise SystemExit("Every runner pool role must have the approved permissions boundary and pilot path.")
 print(json.dumps({"result":"preview_ready", "create_count":len(changes), "region":os.environ["AWS_REGION"],
                   "scale_up_reserved_slots":int(os.environ["RR_SCALE_UP_SLOTS"])}))
 '
