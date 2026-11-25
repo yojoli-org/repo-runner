@@ -51,6 +51,18 @@ Supply only parameter names and ARNs to Terraform. Keep parameter values, PEM fi
 
 ## 4. Prove the runner works
 
+After the App webhook and repository installation are ready, run this command from the repository root with authenticated AWS and GitHub CLIs and Node.js 22.18 or later. Use a dedicated test pool and repository with no other jobs during the check.
+
+```bash
+node onboarding/pilot-smoke.mjs \
+  --profile customer-sandbox --region us-east-2 --account 123456789012 \
+  --repository example-org/private-runner-pilot --prefix rr-pilot
+```
+
+The command runs the reviewed `pilot-smoke.yml` on the default branch, tracks its exact run, and verifies termination, boot disk deletion, and runner registration removal. It cancels a run that exceeds the job deadline and fails if cleanup cannot be verified. Use the reported run URL to investigate a failure before trying again.
+
+For a manual check:
+
 1. Confirm there are zero active pilot workers and no queued pilot jobs before dispatch. Run **Pilot runner smoke test** manually from the private repository's default branch.
 2. Follow the job in GitHub and record the EC2 instance and boot-volume IDs while the worker exists. Confirm only one ARM64 worker launches and the workflow passes.
 3. Verify the instance reaches `terminated`, its boot volume disappears, and the GitHub runner registration is removed. Record dispatch-to-start time, job duration, cleanup time, and any unexpected costs or manual steps.
