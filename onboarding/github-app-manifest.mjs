@@ -17,6 +17,9 @@ export function createRegistration({ organization, appName, homepage, redirectUr
   if (typeof appName !== 'string' || !appName.trim()) {
     throw new Error('Provide a GitHub App name.');
   }
+  if (appName.trim().length > 34) {
+    throw new Error('Use a GitHub App name with 34 characters or fewer.');
+  }
 
   const appHomepage = httpsUrl(homepage);
   const callback = new URL(redirectUrl);

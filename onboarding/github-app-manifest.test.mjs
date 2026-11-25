@@ -25,6 +25,7 @@ test('builds a private organization App request with repository permissions', ()
 
 test('rejects malformed organization names and insecure redirects', () => {
   assert.throws(() => createRegistration({ ...input, organization: '../other' }));
+  assert.throws(() => createRegistration({ ...input, appName: 'x'.repeat(35) }), /34 characters/);
   assert.throws(() => createRegistration({ ...input, redirectUrl: 'http://example.test/' }));
 });
 
