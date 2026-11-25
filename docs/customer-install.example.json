@@ -1,0 +1,14 @@
+{
+  "profile": "customer-sandbox",
+  "region": "us-east-2",
+  "account": "123456789012",
+  "repository": "example-org/private-runner-pilot",
+  "prefix": "rr-pilot",
+  "vpc": "vpc-00000000000000000",
+  "subnets": ["subnet-00000000000000000"],
+  "stateBucket": "example-customer-rr-terraform-state",
+  "stateKey": "repo-runner/rr-pilot.tfstate",
+  "appName": "Example Repo Runner Pilot",
+  "homepage": "https://example.com",
+  "concurrency": "reserved"
+}
