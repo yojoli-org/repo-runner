@@ -38,6 +38,7 @@ module "pilot" {
   instance_types                          = ["t4g.small"]
   instance_target_capacity_type           = "on-demand"
   runners_maximum_count                   = 1
+  scale_up_reserved_concurrent_executions = var.scale_up_reserved_concurrent_executions
   enable_ephemeral_runners                = true
   enable_jit_config                       = true
   enable_job_queued_check                 = true
