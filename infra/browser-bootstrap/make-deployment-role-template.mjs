@@ -74,7 +74,8 @@ const deploy = { Version: '2012-10-17', Statement: [
       ['aws:RequestTag/' + environmentTag]: prefix } }),
   allow(['ec2:AuthorizeSecurityGroupEgress', 'ec2:RevokeSecurityGroupEgress'], arn('ec2', 'security-group/*'), resourceTag),
   allow(['lambda:CreateFunction', 'lambda:GetFunction', 'lambda:GetFunctionConfiguration', 'lambda:GetPolicy',
-    'lambda:GetFunctionConcurrency', 'lambda:PutFunctionConcurrency', 'lambda:ListVersionsByFunction', 'lambda:ListTags', 'lambda:TagResource'], functions),
+    'lambda:GetFunctionConcurrency', 'lambda:PutFunctionConcurrency', 'lambda:ListVersionsByFunction',
+    'lambda:GetFunctionCodeSigningConfig', 'lambda:ListTags', 'lambda:TagResource'], functions),
   allow('lambda:AddPermission', functions, { StringEquals: {
     'lambda:Principal': ['events.amazonaws.com', 'apigateway.amazonaws.com', 's3.amazonaws.com', 'sqs.amazonaws.com'],
   } }),
