@@ -1,6 +1,12 @@
 import { authorizationRequest, exchangeSignIn, githubForm, httpsOrigin, readReturn } from './oauth.mjs';
 
+import { awsDeploymentLink } from './aws-deployment.mjs';
+
 const status = document.querySelector('#status');
+const intro = document.querySelector('#intro');
+const awsSetup = document.querySelector('#aws-setup');
+const deployAws = document.querySelector('#deploy-aws');
+let awsConfigured = false;
 const signIn = document.querySelector('#sign-in');
 const connect = document.querySelector('#connect');
 const clear = document.querySelector('#sign-out');
@@ -18,7 +24,8 @@ function get(key) {
 function show(message, signedIn) {
   status.textContent = message;
   signIn.hidden = signedIn;
-  connect.hidden = !signedIn;
+  connect.hidden = !signedIn || awsConfigured;
+  awsSetup.hidden = !signedIn || !awsConfigured;
   clear.hidden = !signedIn;
   installer.hidden = true;
 }
@@ -59,6 +66,16 @@ async function start() {
   httpsOrigin(config.apiOrigin);
   httpsOrigin(config.cognitoOrigin);
   if (!config.clientId || !config.scope) throw new Error('Sandbox sign-in is not configured.');
+  if (config.awsDeployment !== undefined) {
+    deployAws.href = awsDeploymentLink(config.awsDeployment);
+    for (const [id, key] of [['aws-account', 'account'], ['aws-region', 'region'], ['aws-repository', 'repository']]) {
+      document.querySelector('#' + id).textContent = config.awsDeployment[key];
+    }
+    awsConfigured = true;
+    intro.textContent = 'Deploy an on-demand GitHub Actions runner pool in your AWS account.';
+  }
+  const ready = awsConfigured ? 'Signed in. Review the destination, then approve deployment in AWS.'
+    : 'Signed in. Continue to GitHub when you’re ready.';
 
   clear.onclick = () => {
     Object.values(keys).forEach((key) => sessionStorage.removeItem(key));
@@ -99,7 +116,7 @@ async function start() {
   };
 
   if (!returnedQuery) {
-    show(activeSession() ? 'Signed in. Continue to GitHub when you’re ready.' : 'Sign in to start setup.', Boolean(activeSession()));
+    show(activeSession() ? ready : 'Sign in to start setup.', Boolean(activeSession()));
     return;
   }
 
@@ -114,7 +131,7 @@ async function start() {
     try {
       const auth = await exchangeSignIn(config, redirectUri, result.code, login.verifier);
       sessionStorage.setItem(keys.session, JSON.stringify(auth));
-      show('Signed in. Continue to GitHub when you’re ready.', true);
+      show(ready, true);
     } catch {
       show('Sign-in could not be completed. Please sign in again.', false);
     }
