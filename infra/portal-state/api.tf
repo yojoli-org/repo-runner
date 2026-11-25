@@ -33,7 +33,7 @@ variable "sandbox" {
         appName            = string
         homepage           = string
         redirectUrl        = string
-        webhookUrl         = string
+        webhookUrl         = optional(string)
         allowSmokeDispatch = optional(bool, false)
       })
     }))
@@ -50,10 +50,10 @@ variable "sandbox" {
   }
 
   validation {
-    condition = var.sandbox.customer == null ? true : (
+    condition = var.sandbox.customer == null ? var.deployment_status == null : (
       can(regex("^[a-z0-9][a-z0-9-]{1,23}$", var.sandbox.customer.prefix)) &&
       startswith(var.table_name, "${var.sandbox.customer.prefix}-") &&
-      can(regex("^https://[a-z0-9]+[.]execute-api[.]${var.portal_aws_region}[.]amazonaws[.]com/webhook$", var.sandbox.customer.app.webhookUrl))
+      (var.deployment_status != null || can(regex("^https://[a-z0-9]+[.]execute-api[.]${var.portal_aws_region}[.]amazonaws[.]com/webhook$", var.sandbox.customer.app.webhookUrl)))
     )
     error_message = "Use the runner prefix and its deployed HTTPS webhook in the configured AWS region."
   }
@@ -82,7 +82,7 @@ locals {
   portal_routes = merge({
     "POST /api/onboarding/github/start"   = "POST/api/onboarding/github/start"
     "GET /api/onboarding/github/callback" = "GET/api/onboarding/github/callback"
-  }, local.smoke_routes)
+  }, local.smoke_routes, local.deployment_routes)
 }
 
 resource "aws_cloudwatch_log_group" "portal_api" {
@@ -101,7 +101,7 @@ resource "aws_iam_role_policy" "portal_api" {
   role = aws_iam_role.portal_api.id
   policy = jsonencode({ Version = "2012-10-17", Statement = concat([
     { Effect = "Allow", Action = ["dynamodb:PutItem", "dynamodb:UpdateItem"], Resource = aws_dynamodb_table.registration_attempts.arn },
-    ], [for statement in local.registration_access : jsondecode(statement)], local.smoke_access, [
+    ], [for statement in local.registration_access : jsondecode(statement)], local.smoke_access, local.deployment_access, [
     { Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents"], Resource = "${aws_cloudwatch_log_group.portal_api.arn}:*" },
   ]) })
 }
@@ -123,10 +123,11 @@ resource "aws_lambda_function" "portal_api" {
       }, local.customer_registration ? {
       CUSTOMER_AWS_ACCOUNT_ID = var.portal_aws_account_id
       CUSTOMER_REGISTRATION_CONFIGURATION = jsonencode({
-        prefix   = var.sandbox.customer.prefix
-        app      = var.sandbox.customer.app
-        identity = { issuer = var.sandbox.issuer, subject = var.sandbox.subject, tenantId = var.sandbox.tenantId }
-        smoke    = local.smoke_enabled ? { project = aws_codebuild_project.smoke[0].name, sourceVersion = aws_codebuild_project.smoke[0].source_version } : null
+        prefix     = var.sandbox.customer.prefix
+        app        = var.sandbox.customer.app
+        identity   = { issuer = var.sandbox.issuer, subject = var.sandbox.subject, tenantId = var.sandbox.tenantId }
+        smoke      = local.smoke_enabled ? { project = aws_codebuild_project.smoke[0].name, sourceVersion = aws_codebuild_project.smoke[0].source_version } : null
+        deployment = var.deployment_status
       })
       } : {
       PORTAL_AWS_ACCOUNT_ID = var.portal_aws_account_id

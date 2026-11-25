@@ -140,3 +140,39 @@ run "smoke_routes_require_authorized_customer_configuration" {
     error_message = "Smoke verification must have its own project."
   }
 }
+
+run "deployment_status_uses_the_customer_jwt_scope" {
+  command = plan
+
+  variables {
+    table_name = "example-customer-attempts"
+    deployment_status = {
+      stack         = "rr-example"
+      sourceVersion = "fixture-version"
+    }
+    sandbox = {
+      issuer   = "https://id.example.test"
+      audience = "portal"
+      scope    = "registration/start"
+      tenantId = "example"
+      subject  = "example-user"
+      customer = {
+        prefix = "example-customer"
+        app = {
+          organization = "example-org"
+          appName      = "Example Repo Runner"
+          homepage     = "https://portal.example.test"
+          redirectUrl  = "https://portal.example.test/"
+        }
+      }
+    }
+  }
+
+  assert {
+    condition = length(aws_apigatewayv2_route.portal) == 3 && alltrue([
+      for route in aws_apigatewayv2_route.portal :
+      route.authorization_type == "JWT" && contains(route.authorization_scopes, "registration/start")
+    ])
+    error_message = "Deployment tracking must add one JWT-protected route without a static webhook."
+  }
+}

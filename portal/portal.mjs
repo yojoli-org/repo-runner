@@ -10,6 +10,10 @@ let awsConfigured = false;
 let customerApiOrigin;
 let smokeEnabled = false;
 let smokePoll;
+let deploymentTracking = false;
+let deploymentReady = false;
+let deploymentPoll;
+let deploymentCheckPending = false;
 const signIn = document.querySelector('#sign-in');
 const connect = document.querySelector('#connect');
 const verifyRunner = document.querySelector('#verify-runner');
@@ -29,10 +33,10 @@ function get(key) {
 function show(message, signedIn) {
   status.textContent = message;
   signIn.hidden = signedIn;
-  connect.hidden = !signedIn || (awsConfigured && !customerApiOrigin);
+  connect.hidden = !signedIn || (awsConfigured && (!customerApiOrigin || (deploymentTracking && !deploymentReady)));
   awsSetup.hidden = !signedIn || !awsConfigured;
   clear.hidden = !signedIn;
-  verifyRunner.hidden = !signedIn || !smokeEnabled;
+  verifyRunner.hidden = !signedIn || !smokeEnabled || (deploymentTracking && !deploymentReady);
   installer.hidden = true;
   installApp.hidden = true;
 }
@@ -103,6 +107,60 @@ async function smokeStatus(start = false) {
   }
 }
 
+async function refreshSetup() {
+  const auth = activeSession();
+  if (!auth) return;
+  if (!deploymentTracking || deploymentReady) {
+    if (smokeEnabled) await smokeStatus();
+    return;
+  }
+  if (deploymentCheckPending) return;
+  deploymentCheckPending = true;
+  clearTimeout(deploymentPoll);
+  try {
+    const response = await fetch(new URL('/api/onboarding/deployment/status', customerApiOrigin), {
+      redirect: 'error', cache: 'no-store', headers: { Authorization: `Bearer ${auth.token}` },
+    });
+    if (activeSession()?.token !== auth.token) return;
+    if (response.status === 401) {
+      sessionStorage.removeItem(keys.session);
+      show('Sign in to check AWS deployment.', false);
+      return;
+    }
+    if (!response.ok) throw new Error();
+    const { state } = await response.json();
+    switch (state) {
+      case 'awaiting_approval':
+        deployAws.hidden = false;
+        show('Review the destination, then approve deployment in AWS.', true);
+        break;
+      case 'deploying':
+        deployAws.hidden = true;
+        show('AWS is deploying the runner pool…', true);
+        deploymentPoll = setTimeout(refreshSetup, 8000);
+        break;
+      case 'ready':
+        deploymentReady = true;
+        deployAws.hidden = true;
+        document.querySelector('#aws-approval-note').hidden = true;
+        show('AWS deployment is ready. Continue to GitHub to connect your repository.', true);
+        if (smokeEnabled) await smokeStatus();
+        break;
+      case 'failed':
+      case 'unconfirmed':
+        deployAws.hidden = true;
+        show('Could not confirm AWS deployment. Check the approved stack before retrying.', true);
+        break;
+      default:
+        throw new Error();
+    }
+  } catch {
+    status.textContent = 'Could not check AWS deployment. Reload to check the current status.';
+  } finally {
+    deploymentCheckPending = false;
+  }
+}
+
 async function start() {
   const response = await fetch('./config.json', { cache: 'no-store', redirect: 'error' });
   if (!response.ok) throw new Error('Sandbox configuration is unavailable.');
@@ -115,8 +173,9 @@ async function start() {
     if (config.awsDeployment.registrationApiOrigin !== undefined) {
       customerApiOrigin = customerRegistrationOrigin(config.awsDeployment.registrationApiOrigin, config.awsDeployment.region);
       smokeEnabled = config.awsDeployment.smokeVerification === true;
-      deployAws.hidden = true;
-      document.querySelector('#aws-approval-note').hidden = true;
+      deploymentTracking = config.awsDeployment.trackDeployment === true;
+      deployAws.hidden = !deploymentTracking;
+      document.querySelector('#aws-approval-note').hidden = !deploymentTracking;
     }
     for (const [id, key] of [['aws-account', 'account'], ['aws-region', 'region'], ['aws-repository', 'repository']]) {
       document.querySelector('#' + id).textContent = config.awsDeployment[key];
@@ -124,15 +183,20 @@ async function start() {
     awsConfigured = true;
     intro.textContent = 'Deploy an on-demand GitHub Actions runner pool in your AWS account.';
   }
-  const ready = customerApiOrigin ? 'AWS deployment is ready. Continue to GitHub to connect your repository.'
+  const ready = deploymentTracking ? 'Checking AWS deployment…'
+    : customerApiOrigin ? 'AWS deployment is ready. Continue to GitHub to connect your repository.'
     : awsConfigured ? 'Signed in. Review the destination, then approve deployment in AWS.'
     : 'Signed in. Continue to GitHub when you’re ready.';
 
   clear.onclick = () => {
     clearTimeout(smokePoll);
+    clearTimeout(deploymentPoll);
     Object.values(keys).forEach((key) => sessionStorage.removeItem(key));
     show('Session cleared from this tab.', false);
   };
+  if (deploymentTracking) {
+    window.addEventListener('focus', () => { if (!deploymentReady) void refreshSetup(); });
+  }
   verifyRunner.onclick = async () => {
     verifyRunner.disabled = true;
     try {
@@ -177,7 +241,7 @@ async function start() {
 
   if (!returnedQuery) {
     show(activeSession() ? ready : 'Sign in to start setup.', Boolean(activeSession()));
-    if (smokeEnabled && activeSession()) await smokeStatus();
+    await refreshSetup();
     return;
   }
 
@@ -193,7 +257,7 @@ async function start() {
       const auth = await exchangeSignIn(config, redirectUri, result.code, login.verifier);
       sessionStorage.setItem(keys.session, JSON.stringify(auth));
       show(ready, true);
-      if (smokeEnabled) await smokeStatus();
+      await refreshSetup();
     } catch {
       show('Sign-in could not be completed. Please sign in again.', false);
     }
