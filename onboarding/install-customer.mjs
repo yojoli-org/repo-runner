@@ -1,5 +1,4 @@
 import { execFileSync } from 'node:child_process';
-import { createSign } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -9,6 +8,7 @@ import { parseArgs } from 'node:util';
 import { GetParametersCommand, SSMClient } from '@aws-sdk/client-ssm';
 import { bootstrap } from './customer-app-bootstrap.mjs';
 import { verifyInstallationScope } from './github-installation-scope.mjs';
+import { signAppJwt } from './github-app-jwt.mjs';
 import { appParameterNames } from './parameter-store.mjs';
 import { smoke } from './pilot-smoke.mjs';
 
@@ -104,11 +104,7 @@ async function checkInstallation(config, appId) {
   if (!key || Parameters?.find(({ Name }) => Name === idName)?.Value !== String(appId)) {
     throw new Error('The saved GitHub App metadata does not match this installation.');
   }
-  const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
-  const now = Math.floor(Date.now() / 1000);
-  const unsigned = encode({ alg: 'RS256', typ: 'JWT' }) + '.' + encode({ iat: now - 60, exp: now + 480, iss: String(appId) });
-  const signature = createSign('RSA-SHA256').update(unsigned).sign(Buffer.from(key, 'base64'), 'base64url');
-  const appJwt = unsigned + '.' + signature;
+  const appJwt = signAppJwt(appId, key);
   const response = await fetch(`https://api.github.com/orgs/${config.organization}/installation`, {
     headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + appJwt },
     redirect: 'error', signal: AbortSignal.timeout(15000),

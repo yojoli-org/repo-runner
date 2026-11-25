@@ -28,7 +28,14 @@ variable "sandbox" {
     }))
     customer = optional(object({
       prefix = string
-      app    = object({ organization = string, appName = string, homepage = string, redirectUrl = string, webhookUrl = string })
+      app = object({
+        organization       = string
+        appName            = string
+        homepage           = string
+        redirectUrl        = string
+        webhookUrl         = string
+        allowSmokeDispatch = optional(bool, false)
+      })
     }))
   })
 
