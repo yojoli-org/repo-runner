@@ -49,3 +49,14 @@ After deployment, the pool is waiting for GitHub configuration and smoke verific
 The guided rehearsal created resources through API Gateway, EC2 launch templates and security groups, EventBridge, IAM, Lambda, CloudWatch Logs, S3, SQS, and Systems Manager. The CodeBuild policy needs to cover each resource's create and Terraform read operations. CloudTrail management events are a starting inventory. They omit some permissions checked during a call, such as `iam:PassRole`, and do not include ordinary S3 object events by default.
 
 A deployment role must restrict IAM changes to the pilot role and instance-profile path. Require the approved boundary when creating roles, deny removing or changing it, and restrict `iam:PassRole` to the intended AWS services and pilot roles. The deployment role must have no ability to modify the boundary policy or its own permissions. Review the runtime boundary's permissions for the actual pool before a live apply.
+
+Generate the candidate runtime boundary and the IAM portion of the deployment role policy for review:
+
+```bash
+node infra/browser-bootstrap/runtime-boundary.mjs \
+  --account 123456789012 --region us-east-2 --prefix rr-browser-test
+node infra/browser-bootstrap/deployment-iam.mjs \
+  --account 123456789012 --prefix rr-browser-test --boundary rr-runtime-browser-test
+```
+
+These documents target the pinned sandbox module. The runtime boundary allows EC2 launch actions within the selected region because launch authorization spans several resource types. Use it only in an isolated sandbox until launch scoping is reviewed and a native ARM64 smoke test passes. The runtime roles still need their own identity policies. The deployment IAM fragment deliberately covers only IAM. The CodeBuild role also needs a reviewed policy for the state key, source ZIP, logs, discovery, and non-IAM Terraform resources. Do not attach either document before review and approval.
